@@ -39,8 +39,9 @@ frontend/
     App.jsx               top-level state + tab switch, talks to api.js
     api.js                 fetch wrapper for /api/*
     utils.js                 formatting + invoice-total calculations
+    i18n/                     i18next setup (index.js) + locales/{de,en}.json
     pages/                    Dashboard, InvoiceList, InvoiceForm, InvoiceDetail, Expenses, SettingsPage
-    components/               Sidebar, Icons
+    components/               Sidebar (incl. language switch), Icons
     styles.css                 all styling — plain CSS with custom properties, no framework
 backup/
   backup.sh, restore.sh   sqlite snapshot + rclone-to-pCloud upload/restore
@@ -105,9 +106,26 @@ enough to pick up new migrations in production — no manual DB step.
 - **Design tokens** (colors, fonts) live as CSS custom properties at the
   top of `frontend/src/styles.css` (`--paper`, `--ink`, `--accent`,
   etc.). Reuse them; don't hardcode hex values in components.
-- German-language UI strings throughout (this is a German Kleingewerbe
-  tool) — keep new UI text in German, consistent with the existing tone
-  (direct, slightly informal "du").
+- **i18n: German + English**, via `i18next`/`react-i18next`
+  (`frontend/src/i18n/`). All UI chrome text (buttons, labels, page
+  copy) goes through `t("namespace.key")` — add the string to both
+  `frontend/src/i18n/locales/de.json` and `en.json`, never hardcode new
+  UI text in a component. Keep the German tone direct and slightly
+  informal ("du"). The language switch (DE/EN buttons in `Sidebar.jsx`)
+  persists to `localStorage` via `i18next-browser-languagedetector`,
+  which also picks the browser language on first visit.
+  - **Exception: the printable invoice document** (the `.invoice-doc`
+    block in `InvoiceDetail.jsx`) is hardcoded German and does *not* go
+    through `t()`. It's the actual legal invoice sent to clients under
+    German tax law (§19 UStG) — its language must not follow the
+    admin's UI language preference. Everything around it (buttons,
+    confirm dialogs) is translated normally.
+  - `EXPENSE_CATEGORIES` in `utils.js` are canonical keys (`"equipment"`,
+    `"software"`, …) stored as-is in the DB; translate the *label* via
+    `t(\`expenses.categories.${key}\`)`, never the stored value.
+  - `fmtEUR`/`fmtDate` in `utils.js` take a `lang` ("de"/"en") param and
+    format via `Intl`/`toLocaleDateString` — pass the current
+    `i18n.language`, or `"de"` explicitly for the invoice document.
 - No authentication layer exists — this assumes it's only reachable on
   the home network / VPN. If you add auth, it belongs in
   `backend/app/main.py` as middleware, not scattered per-router.

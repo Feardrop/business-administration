@@ -1,18 +1,25 @@
+// Canonical keys, stored as-is in the DB (see expenses.categories in the i18n
+// locale files for display labels) — translate the label, never the key.
 export const EXPENSE_CATEGORIES = [
-  "Ausrüstung", "Software", "Fahrtkosten", "Versicherung",
-  "Miete/Arbeitsraum", "Fortbildung", "Sonstiges",
+  "equipment", "software", "travel", "insurance", "rent", "training", "other",
 ];
 
-export function fmtEUR(n) {
-  const num = Number(n) || 0;
-  return num.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+const LOCALE_BY_LANG = { de: "de-DE", en: "en-US" };
+
+function localeFor(lang) {
+  return LOCALE_BY_LANG[lang] || LOCALE_BY_LANG.de;
 }
 
-export function fmtDate(iso) {
+export function fmtEUR(n, lang = "de") {
+  const num = Number(n) || 0;
+  return new Intl.NumberFormat(localeFor(lang), { style: "currency", currency: "EUR" }).format(num);
+}
+
+export function fmtDate(iso, lang = "de") {
   if (!iso) return "–";
   const d = new Date(iso + "T00:00:00");
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString(localeFor(lang), { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function todayISO() {

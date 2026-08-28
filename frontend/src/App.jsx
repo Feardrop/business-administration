@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "./api";
 import Sidebar from "./components/Sidebar";
 import { ApertureMark } from "./components/Icons";
@@ -17,6 +18,7 @@ function nextInvoiceNumber(settings, invoices) {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -42,7 +44,7 @@ export default function App() {
     return (
       <div className="loading-screen">
         <ApertureMark size={44} spin />
-        <div className="loading-text">Lade Daten…</div>
+        <div className="loading-text">{t("loading.data")}</div>
       </div>
     );
   }

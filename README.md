@@ -24,6 +24,11 @@ Host (per Bind-Mount) — persistiert also Container-Neustarts und
 Trag als Erstes unter **Einstellungen** deine Geschäftsdaten ein
 (Name, Anschrift, Steuernummer) — die erscheinen auf jeder Rechnung.
 
+Die Oberfläche ist auf Deutsch und Englisch verfügbar (Umschalter unten
+in der Seitenleiste). Die gedruckte Rechnung selbst bleibt unabhängig
+davon immer auf Deutsch, da sie ein rechtsgültiges Dokument nach
+deutschem Steuerrecht ist.
+
 ## Updates einspielen
 
 ```bash
@@ -104,6 +109,7 @@ automatisch beim Start in diesem Verzeichnis.
 | Teil | Technologie |
 |---|---|
 | Frontend | React 18, Vite |
+| i18n | i18next / react-i18next (DE/EN) |
 | Backend | FastAPI, SQLAlchemy 2.x |
 | Datenbank | SQLite (Datei unter `/data/app.db`) |
 | Migrationen | Alembic |

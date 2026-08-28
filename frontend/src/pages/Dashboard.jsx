@@ -1,6 +1,9 @@
+import { useTranslation } from "react-i18next";
 import { currentYear, fmtEUR, invoiceTotals } from "../utils";
 
 export default function Dashboard({ settings, invoices, expenses, onTab }) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const y = currentYear();
   const paidThisYear = invoices.filter((i) => i.status === "bezahlt" && i.paid_date && new Date(i.paid_date).getFullYear() === y);
   const openInvoices = invoices.filter((i) => i.status === "offen");
@@ -25,75 +28,71 @@ export default function Dashboard({ settings, invoices, expenses, onTab }) {
     <>
       {missingRequired && (
         <div className="banner banner-amber">
-          ⚠ In den{" "}
+          {t("dashboard.missingRequiredBefore")}
           <strong style={{ margin: "0 3px", cursor: "pointer", textDecoration: "underline" }} onClick={() => onTab("settings")}>
-            Einstellungen
-          </strong>{" "}
-          fehlen noch Pflichtangaben für rechtsgültige Rechnungen (Name/Anschrift, Steuernummer).
+            {t("dashboard.missingRequiredLink")}
+          </strong>
+          {t("dashboard.missingRequiredAfter")}
         </div>
       )}
       <div className="page-head">
         <div>
-          <h2>Übersicht {y}</h2>
-          <p>Zahlen auf Zufluss-Basis – bezahlte Rechnungen und erfasste Ausgaben.</p>
+          <h2>{t("dashboard.title", { year: y })}</h2>
+          <p>{t("dashboard.subtitle")}</p>
         </div>
       </div>
       <div className="grid-3">
         <div className="card">
-          <div className="stat-label">Einnahmen (netto)</div>
-          <div className="stat-value">{fmtEUR(income)}</div>
+          <div className="stat-label">{t("dashboard.incomeNet")}</div>
+          <div className="stat-value">{fmtEUR(income, lang)}</div>
           {vatCollected > 0 ? (
-            <div className="stat-sub">zzgl. {fmtEUR(vatCollected)} USt, ans Finanzamt abzuführen</div>
+            <div className="stat-sub">{t("dashboard.vatNote", { amount: fmtEUR(vatCollected, lang) })}</div>
           ) : (
-            <div className="stat-sub">{paidThisYear.length} bezahlte Rechnung(en)</div>
+            <div className="stat-sub">{t("dashboard.paidInvoicesCount", { count: paidThisYear.length })}</div>
           )}
         </div>
         <div className="card">
-          <div className="stat-label">Ausgaben</div>
-          <div className="stat-value">{fmtEUR(expenseSum)}</div>
-          <div className="stat-sub">{expensesThisYear.length} Position(en)</div>
+          <div className="stat-label">{t("dashboard.expensesLabel")}</div>
+          <div className="stat-value">{fmtEUR(expenseSum, lang)}</div>
+          <div className="stat-sub">{t("dashboard.expenseItemsCount", { count: expensesThisYear.length })}</div>
         </div>
         <div className="card">
-          <div className="stat-label">Gewinn (EÜR-Vorschau)</div>
-          <div className="stat-value">{fmtEUR(profit)}</div>
-          <div className="stat-sub">Grundfreibetrag ggf. beachten</div>
+          <div className="stat-label">{t("dashboard.profit")}</div>
+          <div className="stat-value">{fmtEUR(profit, lang)}</div>
+          <div className="stat-sub">{t("dashboard.profitNote")}</div>
         </div>
       </div>
 
       {openInvoices.length > 0 && (
         <div className="card">
-          <div className="stat-label">Offene Rechnungen</div>
-          <div className="stat-value">{fmtEUR(openSum)}</div>
+          <div className="stat-label">{t("dashboard.openInvoices")}</div>
+          <div className="stat-value">{fmtEUR(openSum, lang)}</div>
           <div className="stat-sub">
-            {openInvoices.length} noch nicht als bezahlt markiert –{" "}
-            <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => onTab("invoices")}>ansehen</span>
+            {t("dashboard.openInvoicesNote", { count: openInvoices.length })}
+            <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => onTab("invoices")}>{t("dashboard.openInvoicesLink")}</span>
           </div>
         </div>
       )}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="stat-label" style={{ marginBottom: 12 }}>Kleinunternehmer-Grenzen (§19 UStG)</div>
+        <div className="stat-label" style={{ marginBottom: 12 }}>{t("dashboard.limitsTitle")}</div>
         <div className="gauge">
           <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 3 }}>
-            Vorjahresumsatz (manuell in Einstellungen) — Grenze 25.000 €
+            {t("dashboard.prevYearGaugeLabel", { limit: fmtEUR(25000, lang) })}
           </div>
           <div className="gauge-track"><div className={`gauge-fill ${prevState}`} style={{ width: `${prevPct}%` }} /></div>
-          <div className="gauge-ticks"><span>0 €</span><span>{fmtEUR(prevYearRevenue)}</span><span>25.000 €</span></div>
+          <div className="gauge-ticks"><span>{fmtEUR(0, lang)}</span><span>{fmtEUR(prevYearRevenue, lang)}</span><span>{fmtEUR(25000, lang)}</span></div>
         </div>
         <div className="gauge" style={{ marginTop: 16 }}>
           <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 3 }}>
-            Laufendes Jahr (bezahlte Rechnungen) — Grenze 100.000 €
+            {t("dashboard.currentYearGaugeLabel", { limit: fmtEUR(100000, lang) })}
           </div>
           <div className="gauge-track"><div className={`gauge-fill ${curState}`} style={{ width: `${curPct}%` }} /></div>
-          <div className="gauge-ticks"><span>0 €</span><span>{fmtEUR(revenueThisYearGross)}</span><span>100.000 €</span></div>
+          <div className="gauge-ticks"><span>{fmtEUR(0, lang)}</span><span>{fmtEUR(revenueThisYearGross, lang)}</span><span>{fmtEUR(100000, lang)}</span></div>
         </div>
-        <div className="gauge-caption">
-          Überschreitest du eine der Grenzen, entfällt die Kleinunternehmerregelung – die laufende Grenze sogar sofort, nicht erst im Folgejahr.
-        </div>
+        <div className="gauge-caption">{t("dashboard.limitsCaption")}</div>
       </div>
-      <p style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 18 }}>
-        Diese Übersicht ist eine private Vorschau und ersetzt keine Steuerberatung.
-      </p>
+      <p style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 18 }}>{t("dashboard.disclaimer")}</p>
     </>
   );
 }

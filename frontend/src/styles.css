@@ -63,7 +63,9 @@
   .navbtn.active{background:var(--accent);color:var(--accent-ink);}
   .navbtn.active svg{opacity:1;}
 
-  .sidebar-foot{margin-top:auto;padding:14px 20px 4px;font-size:11px;color:var(--ink-faint);border-top:1px solid var(--line);}
+  .lang-switch{margin-top:auto;padding:14px 20px 0;display:flex;gap:6px;}
+  .lang-switch .btn{padding:3px 10px;font-size:11px;}
+  .sidebar-foot{padding:8px 20px 4px;font-size:11px;color:var(--ink-faint);border-top:1px solid var(--line);}
 
   .main{flex:1;min-width:0;padding:32px 40px 60px;overflow-y:auto;}
   .main-inner{max-width:840px;margin:0 auto;}
