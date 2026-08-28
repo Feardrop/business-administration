@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+
+# SQLite (local dev DBs — production data lives in the mounted ./data volume, also ignored)
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# rclone secrets (never commit tokens)
+backup/rclone.conf
+
+# editor/OS
+.DS_Store
+.vscode/

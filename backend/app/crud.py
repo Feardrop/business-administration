@@ -1,0 +1,103 @@
+"""Plain functions doing the actual DB work, kept separate from the
+FastAPI route handlers so the logic is easy to unit test on its own.
+"""
+import datetime as dt
+from decimal import Decimal
+
+from sqlalchemy import extract
+from sqlalchemy.orm import Session
+
+from . import models, schemas
+
+
+def get_settings(db: Session) -> models.Settings:
+    settings = db.get(models.Settings, 1)
+    if settings is None:
+        settings = models.Settings(id=1)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+def update_settings(db: Session, data: schemas.SettingsSchema) -> models.Settings:
+    settings = get_settings(db)
+    for field, value in data.model_dump().items():
+        setattr(settings, field, value)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+def _next_invoice_number(db: Session, settings: models.Settings) -> str:
+    year = dt.date.today().year
+    count = (
+        db.query(models.Invoice)
+        .filter(models.Invoice.number.like(f"%{year}%"))
+        .count()
+    )
+    prefix = f"{settings.invoice_prefix}-" if settings.invoice_prefix else ""
+    return f"{prefix}{year}-{count + 1:03d}"
+
+
+def list_invoices(db: Session):
+    return db.query(models.Invoice).order_by(models.Invoice.date.desc()).all()
+
+
+def get_invoice(db: Session, invoice_id: int):
+    return db.get(models.Invoice, invoice_id)
+
+
+def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
+    settings = get_settings(db)
+    invoice = models.Invoice(
+        number=_next_invoice_number(db, settings),
+        date=data.date,
+        client_name=data.client_name,
+        client_address=data.client_address,
+        is_kleinunternehmer=settings.kleinunternehmer,
+        vat_rate=Decimal("0") if settings.kleinunternehmer else data.vat_rate,
+        note=data.note,
+        status="offen",
+        items=[
+            models.InvoiceItem(description=i.description, qty=i.qty, price=i.price)
+            for i in data.items
+        ],
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
+    invoice.status = status
+    invoice.paid_date = dt.date.today() if status == "bezahlt" else None
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def delete_invoice(db: Session, invoice: models.Invoice) -> None:
+    db.delete(invoice)
+    db.commit()
+
+
+def list_expenses(db: Session, year: int | None = None):
+    q = db.query(models.Expense)
+    if year is not None:
+        q = q.filter(extract("year", models.Expense.date) == year)
+    return q.order_by(models.Expense.date.desc()).all()
+
+
+def create_expense(db: Session, data: schemas.ExpenseCreate) -> models.Expense:
+    expense = models.Expense(**data.model_dump())
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def delete_expense(db: Session, expense: models.Expense) -> None:
+    db.delete(expense)
+    db.commit()

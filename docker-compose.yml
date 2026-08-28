@@ -1,0 +1,15 @@
+# One container: FastAPI + built React app + SQLite, all in the same
+# process/image (see Dockerfile). Compose here is just a convenient way
+# to manage the port and the persistent data volume — not a multi-service
+# setup.
+services:
+  app:
+    build: .
+    container_name: gewerbe-verwaltung
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/app.db
