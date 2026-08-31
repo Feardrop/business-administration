@@ -6,9 +6,15 @@ import datetime as dt
 from decimal import Decimal
 
 from sqlalchemy import extract, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+
+# Defensive cap on create_invoice's retry-on-collision loop (see there) -
+# comfortably above any realistic burst of concurrent requests for this
+# single-user, low-volume app, so it never fires in practice.
+_MAX_CREATE_ATTEMPTS = 25
 
 
 def get_settings(db: Session) -> models.Settings:
@@ -66,23 +72,47 @@ def get_invoice(db: Session, invoice_id: int):
 
 def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
     settings = get_settings(db)
-    sequence, number = _next_invoice_number(db, settings)
-    invoice = models.Invoice(
-        sequence=sequence,
-        number=number,
-        date=data.date,
-        client_name=data.client_name,
-        client_address=data.client_address,
-        is_kleinunternehmer=settings.kleinunternehmer,
-        vat_rate=Decimal("0") if settings.kleinunternehmer else data.vat_rate,
-        note=data.note,
-        status="offen",
-        items=[models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items],
-    )
-    db.add(invoice)
-    db.commit()
-    db.refresh(invoice)
-    return invoice
+
+    # Number assignment and the insert happen in the same attempt, guarded
+    # by a retry-on-IntegrityError loop: two (or more) near-simultaneous
+    # creates can all read the same MAX(sequence) before any of them
+    # commits, so more than one can try to insert the same number.
+    # Whichever commits first wins; everyone else gets a UNIQUE-constraint
+    # IntegrityError and must recompute against the now-committed row(s)
+    # that won. A single retry only covers a two-way collision - a bigger
+    # burst of concurrent requests can still collide on the recomputed
+    # number, so this keeps retrying (each time re-reading a fresh
+    # MAX(sequence)) rather than surfacing a raw 500 to the caller.
+    # `_MAX_CREATE_ATTEMPTS` is a generous cap purely to fail loudly
+    # instead of looping forever if something is genuinely wrong.
+    last_error: IntegrityError | None = None
+    for _attempt in range(_MAX_CREATE_ATTEMPTS):
+        sequence, number = _next_invoice_number(db, settings)
+        invoice = models.Invoice(
+            sequence=sequence,
+            number=number,
+            date=data.date,
+            client_name=data.client_name,
+            client_address=data.client_address,
+            is_kleinunternehmer=settings.kleinunternehmer,
+            vat_rate=Decimal("0") if settings.kleinunternehmer else data.vat_rate,
+            note=data.note,
+            status="offen",
+            items=[
+                models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items
+            ],
+        )
+        db.add(invoice)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            last_error = exc
+            continue
+        db.refresh(invoice)
+        return invoice
+    assert last_error is not None  # pragma: no cover - loop always sets it before exhausting
+    raise last_error
 
 
 def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
