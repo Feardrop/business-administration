@@ -59,6 +59,32 @@ def issue_invoice(invoice_id: int, db: Session = Depends(get_db)):
         ) from exc
 
 
+_CANCELLABLE_STATUSES = ("offen", "bezahlt")
+
+
+@router.post("/{invoice_id}/cancel", response_model=schemas.InvoiceOut, status_code=201)
+def cancel_invoice(invoice_id: int, data: schemas.CancelInvoiceIn, db: Session = Depends(get_db)):
+    invoice = _get_or_404(db, invoice_id)
+    if invoice.status not in _CANCELLABLE_STATUSES:
+        raise HTTPException(
+            409,
+            "Nur ausgestellte, noch nicht stornierte Rechnungen können storniert werden.",
+        )
+    return crud.cancel_invoice(db, invoice, data.reason)
+
+
+@router.post("/{invoice_id}/cancel-and-correct", response_model=schemas.CancelAndCorrectOut, status_code=201)
+def cancel_and_correct_invoice(invoice_id: int, data: schemas.CancelInvoiceIn, db: Session = Depends(get_db)):
+    invoice = _get_or_404(db, invoice_id)
+    if invoice.status not in _CANCELLABLE_STATUSES:
+        raise HTTPException(
+            409,
+            "Nur ausgestellte, noch nicht stornierte Rechnungen können storniert werden.",
+        )
+    cancellation, draft = crud.cancel_and_correct(db, invoice, data.reason)
+    return {"cancellation": cancellation, "draft": draft}
+
+
 @router.post("/{invoice_id}/mark-paid", response_model=schemas.InvoiceOut)
 def mark_paid(invoice_id: int, db: Session = Depends(get_db)):
     invoice = _get_or_404(db, invoice_id)

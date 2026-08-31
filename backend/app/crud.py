@@ -249,6 +249,92 @@ def issue_invoice(db: Session, invoice: models.Invoice) -> models.Invoice:
     raise last_error
 
 
+def cancel_invoice(db: Session, invoice: models.Invoice, reason: str) -> models.Invoice:
+    """Reverse an issued invoice with a Stornorechnung (cancellation
+    invoice) instead of deleting or silently editing it — §14c UStG treats
+    an issued invoice as a legal document that can only be undone by a
+    formal, separately-numbered counter-document.
+
+    Caller must ensure `invoice.status` is "offen" or "bezahlt" (not
+    "draft" — those are just deleted — and not already "storniert").
+
+    In one transaction: marks `invoice` itself as "storniert"
+    (`cancelled_at`/`cancel_reason`), and creates + issues a brand-new
+    Invoice whose items are copies of `invoice`'s with `qty` negated
+    (`price` and `vat_rate` unchanged — issue #33 established `vat_rate`
+    as a per-line property independent of the amount's sign, and negating
+    only `qty` keeps the per-unit price recognizable as "the same price,
+    reversed" on the printed document). The cancellation invoice is routed
+    through `issue_invoice`, so it gets its own real sequential number and
+    its own §14 UStG validation/is_kleinunternehmer snapshot, taken as of
+    *today* (not copied from the original) since it is a new legal
+    document in its own right — a real counter-invoice, not a flag on the
+    original.
+
+    Wiring an audit-log entry for this later is meant to be a one-line
+    addition here (that epic doesn't exist yet in this codebase) — keep
+    this the single function everything routes through.
+
+    Note for issue #30 (partial payments): "storniert" is a terminal
+    status that must NOT be re-derived from payment state. When #30 adds
+    payment-derived status computation (offen/teilweise
+    bezahlt/bezahlt), it must check for "storniert" first and
+    short-circuit — a cancelled invoice's (now moot) payment records must
+    never recompute it back into "offen"/"teilweise bezahlt".
+    """
+    invoice.status = "storniert"  # ty: ignore[invalid-assignment]
+    invoice.cancelled_at = dt.date.today()  # ty: ignore[invalid-assignment]
+    invoice.cancel_reason = reason  # ty: ignore[invalid-assignment]
+
+    cancellation = models.Invoice(
+        number=None,
+        date=dt.date.today(),
+        client_name=invoice.client_name,
+        client_address=invoice.client_address,
+        service_date=invoice.service_date,
+        service_period_text=invoice.service_period_text,
+        is_kleinunternehmer=None,
+        note=f"Storno zu Rechnung {invoice.number}",
+        status="draft",
+        cancels_invoice_id=invoice.id,
+        items=[
+            models.InvoiceItem(description=i.description, qty=-i.qty, price=i.price, vat_rate=i.vat_rate)
+            for i in invoice.items
+        ],
+    )
+    db.add(cancellation)
+    return issue_invoice(db, cancellation)
+
+
+def cancel_and_correct(db: Session, invoice: models.Invoice, reason: str) -> tuple[models.Invoice, models.Invoice]:
+    """`cancel_invoice`, plus a fresh editable draft pre-filled from the
+    original — for the common real-world case where an invoice was wrong
+    and needs to be reissued with corrections, not just reversed.
+
+    Returns `(cancellation_invoice, new_draft)`. The draft is created via
+    `create_draft` (same as any other draft): numberless, no settings
+    snapshotted, freely editable, and not itself linked to the original via
+    `cancels_invoice_id` (only the cancellation invoice is a formal
+    counter-document; the draft is just a convenience starting point).
+    """
+    cancellation = cancel_invoice(db, invoice, reason)
+
+    draft_data = schemas.InvoiceCreate(
+        date=dt.date.today(),
+        client_name=invoice.client_name,
+        client_address=invoice.client_address,
+        service_date=invoice.service_date,
+        service_period_text=invoice.service_period_text,
+        note="",
+        items=[
+            schemas.InvoiceItemIn(description=i.description, qty=i.qty, price=i.price, vat_rate=i.vat_rate)
+            for i in invoice.items
+        ],
+    )
+    draft = create_draft(db, draft_data)
+    return cancellation, draft
+
+
 def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
     invoice.status = status  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
     invoice.paid_date = dt.date.today() if status == "bezahlt" else None  # ty: ignore[invalid-assignment]

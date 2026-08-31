@@ -59,17 +59,24 @@ class Invoice(Base):
 
         draft --issue--> offen --pay--> bezahlt
           |                 |
-          |                 +--cancel--> storniert   (future #26)
+          |                 +--cancel--> storniert   (issue #26)
           +--delete                        ^
                                             |
                     offen --partial payment-+--> teilweise bezahlt --(pay
                                                   rest)--> bezahlt      (#30)
                     teilweise bezahlt --cancel--> storniert            (#26)
 
-    Only "draft", "offen" and "bezahlt" are actually produced by this
-    codebase today. "teilweise bezahlt" and "storniert" are listed here
-    (and in `schemas.InvoiceStatus`) so future issues have a documented
-    target without this column/type needing to change shape again.
+    Only "draft", "offen", "bezahlt" and "storniert" are actually produced
+    by this codebase today. "teilweise bezahlt" is listed here (and in
+    `schemas.InvoiceStatus`) so #30 has a documented target without this
+    column/type needing to change shape again.
+
+    "storniert" is reached only via crud.cancel_invoice — never by
+    deleting or silently editing an issued invoice, which §14c UStG
+    forbids. It is a terminal status that does not derive from payment
+    state (see crud.cancel_invoice's docstring for a note aimed at #30,
+    which will need to make its payment-derived status computation treat
+    "storniert" as terminal too).
 
     A draft has no `number` (nothing is burned until `issue_invoice`
     assigns one) and no `is_kleinunternehmer` snapshot (that snapshot,
@@ -118,12 +125,48 @@ class Invoice(Base):
     # already relied on rather than switching to timezone-aware storage.
     created_at = Column(DateTime, default=lambda: dt.datetime.now(dt.UTC).replace(tzinfo=None))
 
+    # Set by crud.cancel_invoice, together with status="storniert". Null
+    # otherwise. `cancel_reason` is the free-text justification the user
+    # entered — kept on the original for the record even though the
+    # cancellation invoice itself is the actual legal counter-document.
+    cancelled_at = Column(Date, nullable=True)
+    cancel_reason = Column(Text, nullable=True)
+    # Set only on a cancellation invoice itself, pointing back at the
+    # invoice it cancels. Null on every other invoice (including the
+    # cancelled original, which is instead reachable via the
+    # `cancellation_invoice` relationship below).
+    cancels_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
+
     items = relationship(
         "InvoiceItem",
         back_populates="invoice",
         cascade="all, delete-orphan",
         order_by="InvoiceItem.id",
     )
+    # Self-referential one-to-one pair navigating both directions of a
+    # cancellation:
+    #   cancellation_invoice.cancels_invoice        -> the original
+    #   original_invoice.cancellation_invoice        -> the cancellation
+    # See the SQLAlchemy adjacency-list pattern (remote_side on exactly one
+    # side of the pair) — https://docs.sqlalchemy.org/en/20/orm/self_referential.html
+    cancellation_invoice = relationship(
+        "Invoice",
+        back_populates="cancels_invoice",
+        uselist=False,
+    )
+    cancels_invoice = relationship(
+        "Invoice",
+        back_populates="cancellation_invoice",
+        remote_side=[id],
+    )
+
+    @property
+    def cancellation_invoice_id(self) -> int | None:
+        """Convenience read-only mirror of `cancellation_invoice.id`, so
+        `schemas.InvoiceOut` can expose the reverse link (original ->
+        cancellation) as a plain id, same shape as `cancels_invoice_id`.
+        """
+        return self.cancellation_invoice.id if self.cancellation_invoice is not None else None
 
 
 class InvoiceItem(Base):

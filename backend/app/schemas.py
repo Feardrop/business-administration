@@ -113,10 +113,51 @@ class InvoiceOut(BaseModel):
     paid_date: dt.date | None
     issued_at: dt.date | None
     created_at: dt.datetime
+    # Set together with status="storniert" by crud.cancel_invoice. Null on
+    # every invoice that has never been cancelled (issue #26).
+    cancelled_at: dt.date | None
+    cancel_reason: str | None
+    # Set only on a cancellation invoice itself (points at the invoice it
+    # cancels). Null everywhere else, including on the cancelled original.
+    cancels_invoice_id: int | None
+    # The reverse link: set on the cancelled original once a cancellation
+    # invoice exists for it (points at that cancellation invoice). Null
+    # otherwise, including on a cancellation invoice itself.
+    cancellation_invoice_id: int | None
     items: list[InvoiceItemOut]
 
 
 _VALID_EXPENSE_CATEGORIES = ["equipment", "software", "travel", "insurance", "rent", "training", "other"]
+
+
+class CancelInvoiceIn(BaseModel):
+    """Payload for `POST /invoices/{id}/cancel` and `.../cancel-and-correct`.
+
+    §14c UStG forbids simply deleting or silently correcting an issued
+    invoice — it must be reversed with a formal counter-document. `reason`
+    is the free-text justification kept on the original (see
+    `models.Invoice.cancel_reason`) and is required and non-blank; it is
+    NOT printed on the resulting cancellation invoice itself.
+    """
+
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Stornogrund darf nicht leer sein.")
+        return v
+
+
+class CancelAndCorrectOut(BaseModel):
+    """Response for `POST /invoices/{id}/cancel-and-correct`: the new
+    cancellation invoice, plus a fresh editable draft pre-filled from the
+    original for the user to correct and re-issue.
+    """
+
+    cancellation: InvoiceOut
+    draft: InvoiceOut
 
 
 class ExpenseCreate(BaseModel):
