@@ -3,7 +3,16 @@
 // suite"). Fast tests live in `*.test.ts(x)`; slow ones in `*.slow.test.tsx`
 // (see package.json's `test`/`test:slow` scripts).
 import { describe, expect, it } from "vitest";
-import { computeInvoiceStats, fmtDate, fmtEUR, invoiceTotals, isoYear } from "./utils";
+import {
+  amountDue,
+  amountPaid,
+  computeInvoiceStats,
+  fmtDate,
+  fmtEUR,
+  invoiceTotals,
+  isOverpaid,
+  isoYear,
+} from "./utils";
 
 describe("invoiceTotals", () => {
   // Issue #33: vat_rate moved from the invoice onto each line item, and
@@ -76,39 +85,86 @@ describe("invoiceTotals", () => {
 const NON_ASCII_SPACES = new RegExp("[  ]", "g");
 const normalizeSpaces = (s: string): string => s.replace(NON_ASCII_SPACES, " ");
 
+describe("amountPaid / amountDue / isOverpaid", () => {
+  // Issue #30: these operate on inv.payments (the real ledger), not the
+  // old boolean paid_date -- invoiceTotals stays net/vat/gross only.
+
+  it("sums every recorded payment regardless of date", () => {
+    const inv = {
+      payments: [
+        { date: "2026-01-05", amount: "40.00" },
+        { date: "2026-02-10", amount: "25.50" },
+      ],
+    };
+    expect(amountPaid(inv)).toBeCloseTo(65.5);
+  });
+
+  it("amountDue is gross minus payments-to-date for a partially-paid invoice", () => {
+    const inv = {
+      is_kleinunternehmer: true,
+      items: [{ qty: 1, price: 100, vat_rate: 0 }],
+      payments: [{ date: "2026-01-05", amount: "40.00" }],
+    };
+    expect(amountDue(inv)).toBeCloseTo(60);
+    expect(isOverpaid(inv)).toBe(false);
+  });
+
+  it("amountDue floors at 0 and isOverpaid flags an overpayment instead of going negative", () => {
+    const inv = {
+      is_kleinunternehmer: true,
+      items: [{ qty: 1, price: 100, vat_rate: 0 }],
+      payments: [{ date: "2026-01-05", amount: "150.00" }],
+    };
+    expect(amountDue(inv)).toBe(0);
+    expect(isOverpaid(inv)).toBe(true);
+  });
+
+  it("an invoice with no payments yet is fully due", () => {
+    const inv = { is_kleinunternehmer: true, items: [{ qty: 1, price: 100, vat_rate: 0 }], payments: [] };
+    expect(amountPaid(inv)).toBe(0);
+    expect(amountDue(inv)).toBe(100);
+    expect(isOverpaid(inv)).toBe(false);
+  });
+});
+
 describe("computeInvoiceStats", () => {
   // Issue #26: a "storniert" (cancelled) invoice must never contribute to
   // revenue, VAT, or open-balance figures on the Dashboard -- deleting an
   // issued invoice isn't allowed under §14c UStG, so cancellation is the
   // only way an issued invoice's amount stops counting, and the dashboard
   // must actually honor that everywhere it aggregates by status.
+  //
+  // Issue #30: income/VAT are now attributed by each *payment's own*
+  // date, not by the invoice's (removed) paid_date -- the Zufluss-Prinzip
+  // fix for cash-basis tax-year attribution. "open" sums the remaining
+  // balance due, not the full gross, for a partially-paid invoice.
 
-  it("counts a paid invoice's net/vat/gross normally", () => {
+  it("counts a fully-paid invoice's net/vat/gross normally", () => {
     const stats = computeInvoiceStats(
       [
         {
           status: "bezahlt",
-          paid_date: "2026-03-01",
           is_kleinunternehmer: false,
           items: [{ qty: 1, price: 100, vat_rate: 19 }],
+          payments: [{ date: "2026-03-01", amount: "119.00" }],
         },
       ],
       2026
     );
-    expect(stats.income).toBe(100);
+    expect(stats.income).toBeCloseTo(100);
     expect(stats.vatCollected).toBeCloseTo(19);
     expect(stats.revenueThisYearGross).toBeCloseTo(119);
     expect(stats.paidThisYearCount).toBe(1);
   });
 
-  it("excludes a cancelled invoice from income/VAT/revenue even though its stale paid_date would otherwise match", () => {
+  it("excludes a cancelled invoice from income/VAT/revenue even though it has payments this year", () => {
     const stats = computeInvoiceStats(
       [
         {
           status: "storniert",
-          paid_date: "2026-03-01",
           is_kleinunternehmer: false,
           items: [{ qty: 1, price: 100, vat_rate: 19 }],
+          payments: [{ date: "2026-03-01", amount: "119.00" }],
         },
       ],
       2026
@@ -124,9 +180,9 @@ describe("computeInvoiceStats", () => {
       [
         {
           status: "storniert",
-          paid_date: null,
           is_kleinunternehmer: false,
           items: [{ qty: 1, price: 100, vat_rate: 19 }],
+          payments: [],
         },
       ],
       2026
@@ -140,16 +196,105 @@ describe("computeInvoiceStats", () => {
       [
         {
           status: "storniert",
-          paid_date: null,
           is_kleinunternehmer: false,
           items: [{ qty: 1, price: 999, vat_rate: 19 }],
+          payments: [],
         },
-        { status: "offen", paid_date: null, is_kleinunternehmer: false, items: [{ qty: 1, price: 50, vat_rate: 19 }] },
+        {
+          status: "offen",
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 50, vat_rate: 19 }],
+          payments: [],
+        },
       ],
       2026
     );
     expect(stats.openInvoicesCount).toBe(1);
     expect(stats.openSum).toBeCloseTo(59.5);
+  });
+
+  it("attributes income to the year a payment was actually received, not the invoice's own date", () => {
+    // Issue #30, TDD step 6: a payment dated Dec 31 of year Y and one
+    // dated Jan 2 of year Y+1, on two different invoices -- each must be
+    // attributed to its own payment year, not lumped together.
+    const invoiceA = {
+      status: "bezahlt",
+      is_kleinunternehmer: true,
+      items: [{ qty: 1, price: 100, vat_rate: 0 }],
+      payments: [{ date: "2026-12-31", amount: "100.00" }],
+    };
+    const invoiceB = {
+      status: "bezahlt",
+      is_kleinunternehmer: true,
+      items: [{ qty: 1, price: 200, vat_rate: 0 }],
+      payments: [{ date: "2027-01-02", amount: "200.00" }],
+    };
+
+    const stats2026 = computeInvoiceStats([invoiceA, invoiceB], 2026);
+    expect(stats2026.income).toBeCloseTo(100);
+    expect(stats2026.revenueThisYearGross).toBeCloseTo(100);
+    expect(stats2026.paidThisYearCount).toBe(1);
+
+    const stats2027 = computeInvoiceStats([invoiceA, invoiceB], 2027);
+    expect(stats2027.income).toBeCloseTo(200);
+    expect(stats2027.revenueThisYearGross).toBeCloseTo(200);
+    expect(stats2027.paidThisYearCount).toBe(1);
+  });
+
+  it("attributes a payment entered late but dated in a prior year to that prior year (the actual bug fix)", () => {
+    // A payment physically received in December but only entered into the
+    // app in March must still count as December's income -- this is
+    // exactly what the old paid_date-always-today() bug broke.
+    const invoice = {
+      status: "bezahlt",
+      is_kleinunternehmer: true,
+      items: [{ qty: 1, price: 100, vat_rate: 0 }],
+      payments: [{ date: "2025-12-20", amount: "100.00" }],
+    };
+
+    expect(computeInvoiceStats([invoice], 2025).income).toBeCloseTo(100);
+    expect(computeInvoiceStats([invoice], 2026).income).toBe(0);
+  });
+
+  it("open sum uses the remaining balance due for a partially-paid invoice, not its full gross", () => {
+    // Issue #30, TDD step 9.
+    const stats = computeInvoiceStats(
+      [
+        {
+          status: "teilweise bezahlt",
+          is_kleinunternehmer: true,
+          items: [{ qty: 1, price: 100, vat_rate: 0 }],
+          payments: [{ date: "2026-01-10", amount: "40.00" }],
+        },
+        {
+          status: "offen",
+          is_kleinunternehmer: true,
+          items: [{ qty: 1, price: 50, vat_rate: 0 }],
+          payments: [],
+        },
+      ],
+      2026
+    );
+    // 60 remaining on the partial invoice + 50 fully due, not 100 + 50.
+    expect(stats.openSum).toBeCloseTo(110);
+    expect(stats.openInvoicesCount).toBe(2);
+  });
+
+  it("splits a partial payment's income/VAT proportionally rather than counting the whole invoice", () => {
+    const stats = computeInvoiceStats(
+      [
+        {
+          status: "teilweise bezahlt",
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 100, vat_rate: 19 }],
+          payments: [{ date: "2026-01-10", amount: "59.50" }], // half of 119 gross
+        },
+      ],
+      2026
+    );
+    expect(stats.income).toBeCloseTo(50);
+    expect(stats.vatCollected).toBeCloseTo(9.5);
+    expect(stats.revenueThisYearGross).toBeCloseTo(59.5);
   });
 });
 
