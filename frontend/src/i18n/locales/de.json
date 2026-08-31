@@ -75,6 +75,7 @@
     "saveError": "Fehler beim Speichern.",
     "title": "Neue Rechnung",
     "numberLabel": "Rechnungsnummer",
+    "numberPlaceholder": "wird beim Speichern vergeben",
     "dateLabel": "Rechnungsdatum",
     "clientNameLabel": "Kunde – Name / Firma",
     "clientNamePlaceholder": "z. B. Mustermann GmbH",

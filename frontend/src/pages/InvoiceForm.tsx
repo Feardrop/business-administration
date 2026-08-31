@@ -6,7 +6,6 @@ import type { InvoiceCreateInput, Settings } from "../types";
 
 interface InvoiceFormProps {
   settings: Settings;
-  nextNumber: string;
   onCancel: () => void;
   onSubmit: (payload: InvoiceCreateInput) => Promise<void>;
 }
@@ -17,7 +16,7 @@ interface FormItem {
   price: number | string;
 }
 
-export default function InvoiceForm({ settings, nextNumber, onCancel, onSubmit }: InvoiceFormProps) {
+export default function InvoiceForm({ settings, onCancel, onSubmit }: InvoiceFormProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const [date, setDate] = useState(todayISO());
@@ -81,7 +80,7 @@ export default function InvoiceForm({ settings, nextNumber, onCancel, onSubmit }
           <div className="field-row">
             <div className="field">
               <label>{t("invoiceForm.numberLabel")}</label>
-              <input type="text" className="mono" value={nextNumber} disabled />
+              <input type="text" className="mono" placeholder={t("invoiceForm.numberPlaceholder")} disabled />
             </div>
             <div className="field">
               <label>{t("invoiceForm.dateLabel")}</label>

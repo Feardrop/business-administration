@@ -75,6 +75,7 @@
     "saveError": "Error while saving.",
     "title": "New invoice",
     "numberLabel": "Invoice number",
+    "numberPlaceholder": "assigned on save",
     "dateLabel": "Invoice date",
     "clientNameLabel": "Client – name / company",
     "clientNamePlaceholder": "e.g. Sample Ltd.",
