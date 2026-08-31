@@ -41,6 +41,10 @@ export function currentYear(): number {
   return new Date().getFullYear();
 }
 
+export function isoYear(iso: string | null | undefined): number {
+  return Number(iso?.slice(0, 4));
+}
+
 export interface InvoiceTotalsInput {
   is_kleinunternehmer: boolean;
   vat_rate: number | string;
