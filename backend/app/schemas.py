@@ -9,7 +9,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SettingsSchema(BaseModel):
@@ -62,11 +62,49 @@ class InvoiceOut(BaseModel):
     items: list[InvoiceItemOut]
 
 
+_VALID_EXPENSE_CATEGORIES = ["equipment", "software", "travel", "insurance", "rent", "training", "other"]
+
+
 class ExpenseCreate(BaseModel):
     date: dt.date
     category: str
     description: str
-    amount: Decimal
+    amount: Decimal = Field(gt=0, decimal_places=2)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in _VALID_EXPENSE_CATEGORIES:
+            raise ValueError(f"category must be one of {_VALID_EXPENSE_CATEGORIES}")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("description cannot be empty")
+        return v
+
+
+class ExpenseUpdate(BaseModel):
+    date: dt.date | None = None
+    category: str | None = None
+    description: str | None = None
+    amount: Decimal | None = Field(None, gt=0, decimal_places=2)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str | None) -> str | None:
+        if v is not None and v not in _VALID_EXPENSE_CATEGORIES:
+            raise ValueError(f"category must be one of {_VALID_EXPENSE_CATEGORIES}")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str | None) -> str | None:
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("description cannot be empty")
+        return v
 
 
 class ExpenseOut(ExpenseCreate):

@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [development, "release/**", main]
+  # Stacked PRs (see AGENTS.md's multi-agent workflow) target another
+  # open issue branch as their base, not development/release/*/main
+  # directly - without "issue-*" here, those PRs would get zero CI
+  # checks until the whole stack lands on one of the branches above.
   pull_request:
-    branches: [development, "release/**", main]
+    branches: [development, "release/**", main, "issue-*"]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

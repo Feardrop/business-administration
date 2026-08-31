@@ -70,6 +70,13 @@ export interface ExpenseCreateInput {
   amount: number;
 }
 
+export interface ExpenseUpdateInput {
+  date?: string;
+  category?: string;
+  description?: string;
+  amount?: number;
+}
+
 export type Lang = "de" | "en";
 
 // The tab-based navigation state App.tsx owns — see AGENTS.md, this is

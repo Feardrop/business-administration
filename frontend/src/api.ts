@@ -1,4 +1,4 @@
-import type { Expense, ExpenseCreateInput, Invoice, InvoiceCreateInput, Settings } from "./types";
+import type { Expense, ExpenseCreateInput, ExpenseUpdateInput, Invoice, InvoiceCreateInput, Settings } from "./types";
 
 const BASE = "/api";
 
@@ -36,5 +36,7 @@ export const api = {
   listExpenses: (year?: number | string) => request<Expense[]>(`/expenses${year ? `?year=${year}` : ""}`),
   createExpense: (data: ExpenseCreateInput) =>
     request<Expense>("/expenses", { method: "POST", body: JSON.stringify(data) }),
+  updateExpense: (id: number, data: ExpenseUpdateInput) =>
+    request<Expense>(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteExpense: (id: number) => request<null>(`/expenses/${id}`, { method: "DELETE" }),
 };

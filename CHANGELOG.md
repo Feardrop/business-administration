@@ -48,6 +48,22 @@ here relates to the `release/vX.Y.Z` branch workflow.
   (`webidl.util.markAsUncloneable is not a function`). The Dockerfile's
   separate `node:20-alpine` frontend-build stage is unaffected since it
   never imports jsdom.
+- `ci.yaml`: widened the `pull_request.branches` trigger filter to also
+  match `issue-*` — a stacked PR (see AGENTS.md's multi-agent workflow)
+  targets another open issue branch as its base rather than
+  `development`/`release/*`/`main` directly, and previously got zero CI
+  checks as a result.
+
+### Security
+
+- Hardened `spa_catch_all`'s static-file serving against path traversal:
+  a user-controlled URL segment (e.g. `..%2f..%2fetc%2fpasswd`, a
+  percent-encoded `../`) could previously resolve outside `STATIC_DIR` and
+  serve arbitrary files readable by the process, including the SQLite
+  database that holds the entire tax history (`/data/app.db` in the
+  container). The joined candidate path is now resolved and required to
+  stay under a once-resolved `STATIC_DIR` before being served; anything
+  that doesn't falls through to the existing `index.html` SPA response.
 
 ## [0.1.0] - 2026-08-28
 
