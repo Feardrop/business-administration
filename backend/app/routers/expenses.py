@@ -17,6 +17,14 @@ def create_expense(data: schemas.ExpenseCreate, db: Session = Depends(get_db)):
     return crud.create_expense(db, data)
 
 
+@router.patch("/{expense_id}", response_model=schemas.ExpenseOut)
+def update_expense(expense_id: int, data: schemas.ExpenseUpdate, db: Session = Depends(get_db)):
+    expense = db.get(models.Expense, expense_id)
+    if expense is None:
+        raise HTTPException(404, "Ausgabe nicht gefunden.")
+    return crud.update_expense(db, expense, data)
+
+
 @router.delete("/{expense_id}", status_code=204)
 def delete_expense(expense_id: int, db: Session = Depends(get_db)):
     expense = db.get(models.Expense, expense_id)
