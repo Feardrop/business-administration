@@ -16,7 +16,7 @@ def read_invoices(db: Session = Depends(get_db)):
 def create_invoice(data: schemas.InvoiceCreate, db: Session = Depends(get_db)):
     if not data.items:
         raise HTTPException(400, "Rechnung braucht mindestens eine Position.")
-    return crud.create_invoice(db, data)
+    return crud.create_draft(db, data)
 
 
 def _get_or_404(db: Session, invoice_id: int):
@@ -29,6 +29,22 @@ def _get_or_404(db: Session, invoice_id: int):
 @router.get("/{invoice_id}", response_model=schemas.InvoiceOut)
 def read_invoice(invoice_id: int, db: Session = Depends(get_db)):
     return _get_or_404(db, invoice_id)
+
+
+@router.patch("/{invoice_id}", response_model=schemas.InvoiceOut)
+def update_invoice(invoice_id: int, data: schemas.InvoiceUpdate, db: Session = Depends(get_db)):
+    invoice = _get_or_404(db, invoice_id)
+    if invoice.status != "draft":
+        raise HTTPException(409, "Nur Entwürfe können bearbeitet werden.")
+    return crud.update_invoice_draft(db, invoice, data)
+
+
+@router.post("/{invoice_id}/issue", response_model=schemas.InvoiceOut)
+def issue_invoice(invoice_id: int, db: Session = Depends(get_db)):
+    invoice = _get_or_404(db, invoice_id)
+    if invoice.status != "draft":
+        raise HTTPException(409, "Nur Entwürfe können ausgestellt werden.")
+    return crud.issue_invoice(db, invoice)
 
 
 @router.post("/{invoice_id}/mark-paid", response_model=schemas.InvoiceOut)
@@ -46,4 +62,6 @@ def mark_open(invoice_id: int, db: Session = Depends(get_db)):
 @router.delete("/{invoice_id}", status_code=204)
 def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     invoice = _get_or_404(db, invoice_id)
+    if invoice.status != "draft":
+        raise HTTPException(409, "Nur Entwürfe können gelöscht werden.")
     crud.delete_invoice(db, invoice)

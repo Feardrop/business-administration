@@ -14,7 +14,7 @@ from app import crud, schemas
 
 def test_first_invoice_of_the_year_gets_sequence_one(db_session):
     """Fast unit-level test: no HTTP layer, exercises crud directly."""
-    invoice = crud.create_invoice(
+    draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-01-15",
@@ -22,6 +22,10 @@ def test_first_invoice_of_the_year_gets_sequence_one(db_session):
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("100"))],
         ),
     )
+    assert draft.number is None
+    assert draft.status == "draft"
+
+    invoice = crud.issue_invoice(db_session, draft)
 
     assert invoice.number.endswith("-001")
     assert invoice.status == "offen"

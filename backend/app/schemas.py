@@ -11,6 +11,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# The full target status lifecycle (see models.Invoice's docstring for the
+# diagram). Only "draft", "offen" and "bezahlt" are reachable today — this
+# codebase does not implement "teilweise bezahlt" (future #30, partial
+# payments) or "storniert" (future #26, cancellation) yet. All five are
+# listed here up front so InvoiceOut doesn't need a breaking schema change
+# when those issues land.
+InvoiceStatus = Literal["draft", "offen", "teilweise bezahlt", "bezahlt", "storniert"]
+
 
 class SettingsSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -37,6 +45,16 @@ class InvoiceItemOut(InvoiceItemIn):
 
 
 class InvoiceCreate(BaseModel):
+    """Payload for creating a draft (`POST /api/invoices`).
+
+    Nothing here is burned: no number is assigned and no settings are
+    snapshotted until the draft is issued (`POST
+    /api/invoices/{id}/issue`) — see crud.create_draft / crud.issue_invoice.
+    `vat_rate` is the rate the user picked in the form; it is kept as-is on
+    the draft and only zeroed out at issue time if settings.kleinunternehmer
+    is true then.
+    """
+
     date: dt.date
     client_name: str
     client_address: str = ""
@@ -45,19 +63,37 @@ class InvoiceCreate(BaseModel):
     items: list[InvoiceItemIn]
 
 
+class InvoiceUpdate(BaseModel):
+    """Partial update for a draft (`PATCH /api/invoices/{id}`).
+
+    Every field is optional: only fields explicitly present in the request
+    body are applied (see crud.update_invoice_draft's `exclude_unset`
+    usage). Restricted to drafts by the router — issued invoices are
+    immutable via this route (409).
+    """
+
+    date: dt.date | None = None
+    client_name: str | None = None
+    client_address: str | None = None
+    vat_rate: Decimal | None = None
+    note: str | None = None
+    items: list[InvoiceItemIn] | None = None
+
+
 class InvoiceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    number: str
+    number: str | None
     date: dt.date
     client_name: str
     client_address: str
-    is_kleinunternehmer: bool
+    is_kleinunternehmer: bool | None
     vat_rate: Decimal
     note: str
-    status: Literal["offen", "bezahlt"]
+    status: InvoiceStatus
     paid_date: dt.date | None
+    issued_at: dt.date | None
     created_at: dt.datetime
     items: list[InvoiceItemOut]
 

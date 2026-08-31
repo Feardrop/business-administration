@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 
-# Defensive cap on create_invoice's retry-on-collision loop (see there) -
+# Defensive cap on issue_invoice's retry-on-collision loop (see there) -
 # comfortably above any realistic burst of concurrent requests for this
 # single-user, low-volume app, so it never fires in practice.
 _MAX_CREATE_ATTEMPTS = 25
@@ -51,6 +51,11 @@ def _next_invoice_number(db: Session, settings: models.Settings) -> tuple[int, s
     unrelated invoice's number contain the current year's digits purely
     by coincidence, which a substring match would wrongly count.
     """
+    # `func.max()` ignores NULL sequence values, so drafts (sequence=None,
+    # per issue #25) are automatically excluded from the aggregate — an
+    # abandoned/deleted draft never had a sequence assigned, so it never
+    # consumes a slot (GoBD forbids gaps in issued invoice numbers). No
+    # separate "has a number" filter is needed alongside this.
     year = dt.date.today().year
     max_sequence = (
         db.query(func.max(models.Invoice.sequence))
@@ -70,39 +75,73 @@ def get_invoice(db: Session, invoice_id: int):
     return db.get(models.Invoice, invoice_id)
 
 
-def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
+def create_draft(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
+    """Create a new invoice as an editable, numberless draft.
+
+    No number/sequence is assigned and no settings are snapshotted here —
+    that only happens at issue time (see `issue_invoice`), so an abandoned
+    draft never burns a number or locks in a since-changed setting.
+    """
+    invoice = models.Invoice(
+        number=None,
+        sequence=None,
+        date=data.date,
+        client_name=data.client_name,
+        client_address=data.client_address,
+        is_kleinunternehmer=None,
+        vat_rate=data.vat_rate,
+        note=data.note,
+        status="draft",
+        items=[models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items],
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def update_invoice_draft(db: Session, invoice: models.Invoice, data: schemas.InvoiceUpdate) -> models.Invoice:
+    """Apply a partial update to a draft. Caller must ensure it's a draft."""
+    update_data = data.model_dump(exclude_unset=True)
+    items_data = update_data.pop("items", None)
+    for field, value in update_data.items():
+        setattr(invoice, field, value)  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
+    if items_data is not None:
+        invoice.items = [models.InvoiceItem(**item) for item in items_data]
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+def issue_invoice(db: Session, invoice: models.Invoice) -> models.Invoice:
+    """The one-way draft -> offen transition: assign the number, snapshot
+    settings, stamp the issue date, and lock the record.
+
+    Caller must ensure `invoice` is currently a draft.
+
+    Number assignment and the commit happen in the same attempt, guarded by
+    a retry-on-IntegrityError loop: two (or more) near-simultaneous issues
+    can all read the same MAX(sequence) before any of them commits, so more
+    than one can try to write the same number. Whichever commits first
+    wins; everyone else gets a UNIQUE-constraint IntegrityError and must
+    recompute against the now-committed row(s) that won. `_MAX_CREATE_ATTEMPTS`
+    is a generous cap purely to fail loudly instead of looping forever if
+    something is genuinely wrong.
+    """
     settings = get_settings(db)
 
-    # Number assignment and the insert happen in the same attempt, guarded
-    # by a retry-on-IntegrityError loop: two (or more) near-simultaneous
-    # creates can all read the same MAX(sequence) before any of them
-    # commits, so more than one can try to insert the same number.
-    # Whichever commits first wins; everyone else gets a UNIQUE-constraint
-    # IntegrityError and must recompute against the now-committed row(s)
-    # that won. A single retry only covers a two-way collision - a bigger
-    # burst of concurrent requests can still collide on the recomputed
-    # number, so this keeps retrying (each time re-reading a fresh
-    # MAX(sequence)) rather than surfacing a raw 500 to the caller.
-    # `_MAX_CREATE_ATTEMPTS` is a generous cap purely to fail loudly
-    # instead of looping forever if something is genuinely wrong.
+    # `db.rollback()` on a collision expires every attribute on `invoice`
+    # (it's still the same session-managed instance the caller passed in),
+    # so all of these are re-applied on every attempt rather than once
+    # up front - otherwise a retry would commit with the expired, reloaded
+    # ("draft") values for everything except sequence/number.
     last_error: IntegrityError | None = None
     for _attempt in range(_MAX_CREATE_ATTEMPTS):
-        sequence, number = _next_invoice_number(db, settings)
-        invoice = models.Invoice(
-            sequence=sequence,
-            number=number,
-            date=data.date,
-            client_name=data.client_name,
-            client_address=data.client_address,
-            is_kleinunternehmer=settings.kleinunternehmer,
-            vat_rate=Decimal("0") if settings.kleinunternehmer else data.vat_rate,
-            note=data.note,
-            status="offen",
-            items=[
-                models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items
-            ],
-        )
-        db.add(invoice)
+        invoice.is_kleinunternehmer = settings.kleinunternehmer
+        invoice.vat_rate = Decimal("0") if settings.kleinunternehmer else invoice.vat_rate  # ty: ignore[invalid-assignment]
+        invoice.issued_at = dt.date.today()  # ty: ignore[invalid-assignment]
+        invoice.status = "offen"  # ty: ignore[invalid-assignment]
+        invoice.sequence, invoice.number = _next_invoice_number(db, settings)  # ty: ignore[invalid-assignment]
         try:
             db.commit()
         except IntegrityError as exc:
