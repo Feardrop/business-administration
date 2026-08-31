@@ -10,6 +10,10 @@ export interface Settings {
   owner_name: string;
   address: string;
   tax_number: string;
+  // Umsatzsteuer-Identifikationsnummer, separate from tax_number
+  // (Steuernummer) — optional, since many small Kleingewerbe businesses
+  // don't have one. Printed on the invoice only when set.
+  ust_id_nr: string;
   iban: string;
   kleinunternehmer: boolean;
   prev_year_revenue: string;
@@ -21,12 +25,16 @@ export interface InvoiceItem {
   description: string;
   qty: string;
   price: string;
+  // Per-line VAT rate (moved off Invoice in issue #33) — mixing 19%/7%
+  // lines on one invoice is normal for this business.
+  vat_rate: string;
 }
 
 export interface InvoiceItemInput {
   description: string;
   qty: number | string;
   price: number | string;
+  vat_rate?: number | string;
 }
 
 // Full target status lifecycle (see backend/app/schemas.py's InvoiceStatus
@@ -50,10 +58,16 @@ export interface Invoice {
   date: string;
   client_name: string;
   client_address: string;
+  // §14 Abs. 4 Nr. 6 UStG (issue #33): when the service was actually
+  // rendered, which is not necessarily `date`. Exactly one of these two is
+  // expected to be set — an exact day, or a free-text period like "August
+  // 2026" for work invoiced later than it was performed. If both are
+  // somehow set, service_date takes priority when printing.
+  service_date: string | null;
+  service_period_text: string | null;
   // Null while status is "draft" — snapshotted from settings at issue
   // time and immutable afterward.
   is_kleinunternehmer: boolean | null;
-  vat_rate: string;
   note: string;
   status: InvoiceStatus;
   paid_date: string | null;
@@ -66,7 +80,8 @@ export interface InvoiceCreateInput {
   date: string;
   client_name: string;
   client_address?: string;
-  vat_rate?: number;
+  service_date?: string;
+  service_period_text?: string;
   note?: string;
   items: InvoiceItemInput[];
 }
@@ -78,7 +93,8 @@ export interface InvoiceUpdateInput {
   date?: string;
   client_name?: string;
   client_address?: string;
-  vat_rate?: number;
+  service_date?: string;
+  service_period_text?: string;
   note?: string;
   items?: InvoiceItemInput[];
 }

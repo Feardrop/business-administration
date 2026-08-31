@@ -45,6 +45,14 @@ export function isoYear(iso: string | null | undefined): number {
   return Number(iso?.slice(0, 4));
 }
 
+export interface InvoiceTotalsItemInput {
+  qty: number | string;
+  price: number | string;
+  // Issue #33: vat_rate lives per line item now (mixing 19%/7% lines on one
+  // invoice is normal for this business), not once per invoice.
+  vat_rate: number | string;
+}
+
 export interface InvoiceTotalsInput {
   // Null on a still-unissued draft (see types.ts's Invoice.is_kleinunternehmer).
   // Callers displaying a draft's provisional totals should resolve this
@@ -52,18 +60,51 @@ export interface InvoiceTotalsInput {
   // settings.kleinunternehmer`) rather than relying on a snapshot that
   // doesn't exist yet — null is treated the same as false here.
   is_kleinunternehmer: boolean | null;
-  vat_rate: number | string;
-  items?: { qty: number | string; price: number | string }[];
+  items?: InvoiceTotalsItemInput[];
+}
+
+// One row of the printed §14 UStG breakdown table — a net subtotal and VAT
+// amount for every distinct rate present among the invoice's items.
+export interface VatBreakdownLine {
+  vat_rate: number;
+  net: number;
+  vat: number;
 }
 
 export interface InvoiceTotals {
   net: number;
   vat: number;
   gross: number;
+  // Grouped per distinct rate present on the invoice's items, sorted
+  // highest rate first. Always empty for a Kleinunternehmer invoice (§19
+  // UStG: no VAT breakdown at all, regardless of what rates the lines
+  // happen to carry) — check this instead of `vat === 0` when deciding
+  // whether to render a breakdown, since a non-Kleinunternehmer invoice can
+  // legitimately have a 0% line without being exempt.
+  breakdown: VatBreakdownLine[];
 }
 
 export function invoiceTotals(inv: InvoiceTotalsInput): InvoiceTotals {
-  const net = (inv.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
-  const vat = inv.is_kleinunternehmer ? 0 : (net * (Number(inv.vat_rate) || 0)) / 100;
-  return { net, vat, gross: net + vat };
+  const items = inv.items || [];
+  const net = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
+
+  if (inv.is_kleinunternehmer) {
+    return { net, vat: 0, gross: net, breakdown: [] };
+  }
+
+  const byRate = new Map<number, { net: number; vat: number }>();
+  for (const it of items) {
+    const rate = Number(it.vat_rate) || 0;
+    const lineNet = (Number(it.qty) || 0) * (Number(it.price) || 0);
+    const entry = byRate.get(rate) || { net: 0, vat: 0 };
+    entry.net += lineNet;
+    entry.vat += (lineNet * rate) / 100;
+    byRate.set(rate, entry);
+  }
+  const breakdown: VatBreakdownLine[] = Array.from(byRate.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([vat_rate, { net: rateNet, vat: rateVat }]) => ({ vat_rate, net: rateNet, vat: rateVat }));
+  const vat = breakdown.reduce((s, b) => s + b.vat, 0);
+
+  return { net, vat, gross: net + vat, breakdown };
 }

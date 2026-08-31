@@ -57,6 +57,7 @@ describe("InvoiceForm", () => {
     owner_name: "John Doe",
     address: "123 Main St",
     tax_number: "DE123456789",
+    ust_id_nr: "",
     iban: "DE89370400440532013000",
     kleinunternehmer: false,
     invoice_prefix: "FOTO",

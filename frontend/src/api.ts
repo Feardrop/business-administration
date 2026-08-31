@@ -10,20 +10,45 @@ import type {
 
 const BASE = "/api";
 
+// Raised for a §14 UStG issue-time validation failure (see
+// backend/app/routers/invoices.py's 422 on POST /invoices/{id}/issue) —
+// `missingFields` carries the precise list of missing requirements
+// alongside the combined human-readable `message`, for any caller that
+// wants to render them separately instead of as one string.
+export class InvoiceIssueValidationError extends Error {
+  missingFields: string[];
+
+  constructor(message: string, missingFields: string[]) {
+    super(message);
+    this.name = "InvoiceIssueValidationError";
+    this.missingFields = missingFields;
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: unknown = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || detail;
+      detail = body.detail ?? detail;
     } catch (_) {
       /* ignore, keep statusText */
     }
-    throw new Error(detail);
+    if (typeof detail === "string") {
+      throw new Error(detail);
+    }
+    // Structured {"message": ..., "missing_fields": [...]} shape (see
+    // crud.InvoiceIssueValidationError / routers/invoices.py).
+    const structured = detail as { message?: string; missing_fields?: string[] };
+    const missingFields = structured.missing_fields || [];
+    const message = missingFields.length
+      ? `${structured.message || res.statusText} ${missingFields.join(", ")}`
+      : structured.message || res.statusText;
+    throw new InvoiceIssueValidationError(message, missingFields);
   }
   if (res.status === 204) return null as T;
   return res.json();

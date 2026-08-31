@@ -325,6 +325,17 @@ textarea:focus-visible {
   width: 16px;
   height: 16px;
 }
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.radio-option input {
+  width: 15px;
+  height: 15px;
+}
 
 /* ---------- Tables ---------- */
 table {
@@ -402,7 +413,14 @@ th.num {
   margin-bottom: 8px;
   align-items: center;
 }
-.item-row input {
+/* One extra column for the per-line VAT-rate selector (issue #33) — only
+   rendered when the business isn't a Kleinunternehmer, since the rate is
+   always 0 otherwise. */
+.item-row.with-vat {
+  grid-template-columns: 1fr 70px 100px 90px 34px;
+}
+.item-row input,
+.item-row select {
   width: 100%;
 }
 .item-total-line {

@@ -72,9 +72,19 @@ export default function SettingsPage({ settings, onSave }: SettingsPageProps) {
               />
             </div>
             <div className="field">
-              <label>{t("settings.ibanLabel")}</label>
-              <input type="text" value={form.iban} onChange={(e) => set("iban", e.target.value)} />
+              <label>{t("settings.ustIdNrLabel")}</label>
+              <input
+                type="text"
+                value={form.ust_id_nr}
+                onChange={(e) => set("ust_id_nr", e.target.value)}
+                placeholder={t("settings.ustIdNrPlaceholder")}
+              />
+              <div className="field-hint">{t("settings.ustIdNrHint")}</div>
             </div>
+          </div>
+          <div className="field">
+            <label>{t("settings.ibanLabel")}</label>
+            <input type="text" value={form.iban} onChange={(e) => set("iban", e.target.value)} />
           </div>
         </div>
         <div className="card">

@@ -30,7 +30,11 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
   const prevState = prevYearRevenue > 25000 ? "over" : prevYearRevenue > 20000 ? "warn" : "";
   const curState = revenueThisYearGross > 100000 ? "over" : revenueThisYearGross > 85000 ? "warn" : "";
 
-  const missingRequired = !settings.business_name || !settings.tax_number;
+  // Kept consistent with backend/app/crud.py's `_missing_issue_fields`
+  // (issue #33): business_name + address are always required, and either
+  // tax_number or ust_id_nr satisfies the Steuernummer-or-USt-IdNr
+  // requirement.
+  const missingRequired = !settings.business_name || !settings.address || (!settings.tax_number && !settings.ust_id_nr);
 
   return (
     <>

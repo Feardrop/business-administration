@@ -137,12 +137,22 @@ export default function InvoiceDetail({
             {s.owner_name ? `\n${s.owner_name}` : ""}
             {s.address ? `\n${s.address}` : ""}
             {s.tax_number ? `\nSt.-Nr.: ${s.tax_number}` : ""}
+            {s.ust_id_nr ? `\nUSt-IdNr.: ${s.ust_id_nr}` : ""}
           </div>
           <div className="meta">
             <div>Rechnungsnummer</div>
             <div className="num">{invoice.number || "–"}</div>
             <div style={{ marginTop: 8 }}>Rechnungsdatum</div>
             <div>{fmtDate(invoice.date, "de")}</div>
+            {(invoice.service_date || invoice.service_period_text) && (
+              <>
+                {/* §14 Abs. 4 Nr. 6 UStG: when the service was actually
+                    rendered — not the same as the document date above.
+                    service_date takes priority if both are somehow set. */}
+                <div style={{ marginTop: 8 }}>{invoice.service_date ? "Leistungsdatum" : "Leistungszeitraum"}</div>
+                <div>{invoice.service_date ? fmtDate(invoice.service_date, "de") : invoice.service_period_text}</div>
+              </>
+            )}
           </div>
         </div>
         <h1 className="title">Rechnung</h1>
@@ -150,37 +160,53 @@ export default function InvoiceDetail({
           {invoice.client_name}
           {invoice.client_address ? `\n${invoice.client_address}` : ""}
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Position</th>
-              <th className="num">Menge</th>
-              <th className="num">Einzelpreis</th>
-              <th className="num">Betrag</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(invoice.items || []).map((it) => (
-              <tr key={it.id}>
-                <td>{it.description}</td>
-                <td className="num">{it.qty}</td>
-                <td className="num">{fmtEUR(it.price, "de")}</td>
-                <td className="num">{fmtEUR((Number(it.qty) || 0) * (Number(it.price) || 0), "de")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* is_kleinunternehmer is null only on a still-unissued draft;
+            resolved against the current setting for the same reason
+            `total` below is. */}
+        {(() => {
+          const showVat = !(invoice.is_kleinunternehmer ?? settings.kleinunternehmer);
+          return (
+            <table>
+              <thead>
+                <tr>
+                  <th>Position</th>
+                  <th className="num">Menge</th>
+                  <th className="num">Einzelpreis</th>
+                  {showVat && <th className="num">USt</th>}
+                  <th className="num">Betrag</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(invoice.items || []).map((it) => (
+                  <tr key={it.id}>
+                    <td>{it.description}</td>
+                    <td className="num">{it.qty}</td>
+                    <td className="num">{fmtEUR(it.price, "de")}</td>
+                    {showVat && <td className="num">{Number(it.vat_rate)}%</td>}
+                    <td className="num">{fmtEUR((Number(it.qty) || 0) * (Number(it.price) || 0), "de")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        })()}
         <div className="totals">
           <div className="line">
             <span>Nettobetrag</span>
             <span className="mono">{fmtEUR(total.net, "de")}</span>
           </div>
-          {!(invoice.is_kleinunternehmer ?? settings.kleinunternehmer) && (
-            <div className="line">
-              <span>zzgl. {invoice.vat_rate}% USt</span>
-              <span className="mono">{fmtEUR(total.vat, "de")}</span>
+          {/* Per-rate breakdown (§14 UStG) — one line per distinct rate
+              present on the invoice's items, not a single combined VAT
+              line. Always empty for a Kleinunternehmer invoice, regardless
+              of what the (now-irrelevant) per-line rates happen to be. */}
+          {total.breakdown.map((b) => (
+            <div className="line" key={b.vat_rate}>
+              <span>
+                zzgl. {b.vat_rate}% USt auf {fmtEUR(b.net, "de")}
+              </span>
+              <span className="mono">{fmtEUR(b.vat, "de")}</span>
             </div>
-          )}
+          ))}
           <div className="line grand">
             <span>Gesamtbetrag</span>
             <span>{fmtEUR(total.gross, "de")}</span>
