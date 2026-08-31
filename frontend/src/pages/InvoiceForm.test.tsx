@@ -26,21 +26,13 @@ const settings: Settings = {
 };
 
 describe("InvoiceForm", () => {
-  it("renders the next invoice number and a VAT-rate selector when not a Kleinunternehmer", () => {
-    render(<InvoiceForm settings={settings} nextNumber="2026-002" onCancel={vi.fn()} onSubmit={vi.fn()} />);
-    expect(screen.getByDisplayValue("2026-002")).toBeInTheDocument();
+  it("shows a VAT-rate selector when not a Kleinunternehmer", () => {
+    render(<InvoiceForm settings={settings} onCancel={vi.fn()} onSubmit={vi.fn()} />);
     expect(screen.getByText(/19 %/)).toBeInTheDocument();
   });
 
   it("hides the VAT-rate selector for a Kleinunternehmer", () => {
-    render(
-      <InvoiceForm
-        settings={{ ...settings, kleinunternehmer: true }}
-        nextNumber="2026-002"
-        onCancel={vi.fn()}
-        onSubmit={vi.fn()}
-      />
-    );
+    render(<InvoiceForm settings={{ ...settings, kleinunternehmer: true }} onCancel={vi.fn()} onSubmit={vi.fn()} />);
     expect(screen.queryByText(/19 %/)).not.toBeInTheDocument();
   });
 });
