@@ -11,6 +11,37 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Added
 
+- §14 UStG mandatory invoice fields (issue #33):
+  - `Invoice.service_date`/`service_period_text` — the invoice can now
+    state when the service was actually rendered (an exact Leistungsdatum,
+    or a free-text Leistungszeitraum like "August 2026" for work invoiced
+    later than it was performed), separate from the document date. The UI
+    lets the user pick one mode or the other; the printed document shows
+    whichever is set.
+  - `vat_rate` moved from `Invoice` to `InvoiceItem` — mixing 19%/7% lines
+    on one invoice (e.g. a shooting fee plus an image licence) no longer
+    requires splitting into two invoices. `invoiceTotals()` now groups net/
+    VAT subtotals per distinct rate present (a new `breakdown` array), and
+    the printed invoice shows a per-rate breakdown table instead of a
+    single combined VAT line — Kleinunternehmer invoices still show no VAT
+    breakdown at all.
+  - `Settings.ust_id_nr` (Umsatzsteuer-Identifikationsnummer), separate
+    from `tax_number` (Steuernummer) and optional — printed on the invoice
+    only when set.
+  - Issuing a draft (`POST /api/invoices/{id}/issue`) now validates the
+    full §14 Abs. 4 UStG mandatory-field checklist (supplier name/address,
+    Steuernummer-or-USt-IdNr, recipient name, service date/period, at
+    least one line item) and fails with a structured 422
+    (`{"message": ..., "missing_fields": [...]}`) naming exactly what's
+    missing, rather than assigning a number regardless. Under a 250€ gross
+    total, the §33 UStDV Kleinbetragsrechnung exemption relaxes the
+    recipient-address requirement.
+  - The dashboard's missing-required-settings banner now also flags a
+    missing Steuernummer-or-USt-IdNr and address, consistent with the new
+    issue-time validation.
+  - Migration backfills every existing `InvoiceItem` with its parent
+    invoice's old `vat_rate` before dropping the now-redundant
+    `Invoice.vat_rate` column.
 - Draft invoice status (issue #25): new invoices now start as editable,
   numberless drafts instead of immediately burning an invoice number.
   Nothing is assigned — no `number`, no `is_kleinunternehmer`/`vat_rate`
