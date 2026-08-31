@@ -14,12 +14,17 @@ substring. That breaks in several ways, each covered by a test below:
    year's digits, so an old invoice whose number was built from that
    prefix (but issued in a different year) wrongly matches the current
    year's `LIKE '%<year>%'` filter and inflates the next sequence.
+3. Two near-simultaneous creates can both read the same MAX(sequence)
+   before either commits, so both compute and try to insert the same
+   next number.
 """
 
 import datetime as dt
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 from app import crud, models, schemas
+from app.database import SessionLocal
 
 
 def _make_invoice(db, client_name="Client"):
@@ -74,3 +79,46 @@ def test_numeric_prefix_does_not_inflate_count(db_session):
     first = _make_invoice(db_session, "First")
 
     assert first.number.endswith("-001")
+
+
+def test_concurrent_create_no_duplicates():
+    """~20 near-simultaneous creates must not compute the same next number.
+
+    A plain SQLAlchemy `Session` is not thread-safe, so sharing one
+    literal `Session` object across threads (as FastAPI never does - it
+    opens one per request via `get_db()`) raises `IllegalStateChangeError`
+    for reasons unrelated to the numbering bug. Instead this gives every
+    thread its own short-lived session against the same underlying
+    database, the same way concurrent HTTP requests would each get their
+    own request-scoped session - which is exactly the race
+    `_next_invoice_number` needs to survive.
+    """
+    from app.database import Base, engine
+
+    Base.metadata.create_all(bind=engine)
+    try:
+        # Pre-create the singleton settings row so every thread's
+        # get_settings() call is a plain read - get_settings's own
+        # get-or-create race is a separate, pre-existing issue, not the
+        # invoice-numbering race this test targets.
+        seed = SessionLocal()
+        try:
+            crud.get_settings(seed)
+        finally:
+            seed.close()
+
+        def _create(i):
+            session = SessionLocal()
+            try:
+                return _make_invoice(session, f"Client {i}")
+            finally:
+                session.close()
+
+        n = 20
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            invoices = list(pool.map(_create, range(n)))
+
+        numbers = [inv.number for inv in invoices]
+        assert len(numbers) == len(set(numbers))
+    finally:
+        Base.metadata.drop_all(bind=engine)
