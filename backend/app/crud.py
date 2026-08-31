@@ -143,6 +143,15 @@ def create_expense(db: Session, data: schemas.ExpenseCreate) -> models.Expense:
     return expense
 
 
+def update_expense(db: Session, expense: models.Expense, data: schemas.ExpenseUpdate) -> models.Expense:
+    """Update only the provided fields of an expense."""
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(expense, field, value)
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
 def delete_expense(db: Session, expense: models.Expense) -> None:
     db.delete(expense)
     db.commit()

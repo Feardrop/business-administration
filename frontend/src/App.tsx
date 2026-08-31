@@ -9,14 +9,15 @@ import InvoiceForm from "./pages/InvoiceForm";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Expenses from "./pages/Expenses";
 import SettingsPage from "./pages/SettingsPage";
-import type { Expense, ExpenseCreateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
-
-function nextInvoiceNumber(settings: Settings, invoices: Invoice[]): string {
-  const year = new Date().getFullYear();
-  const prefix = settings.invoice_prefix ? `${settings.invoice_prefix}-` : "";
-  const count = invoices.filter((i) => i.number && i.number.includes(String(year))).length;
-  return `${prefix}${year}-${String(count + 1).padStart(3, "0")}`;
-}
+import type {
+  Expense,
+  ExpenseCreateInput,
+  ExpenseUpdateInput,
+  Invoice,
+  InvoiceCreateInput,
+  Settings,
+  Tab,
+} from "./types";
 
 export default function App() {
   const { t } = useTranslation();
@@ -80,6 +81,10 @@ export default function App() {
     await api.createExpense(payload);
     await refreshExpenses();
   }
+  async function handleUpdateExpense(id: number, payload: ExpenseUpdateInput) {
+    await api.updateExpense(id, payload);
+    await refreshExpenses();
+  }
   async function handleDeleteExpense(id: number) {
     await api.deleteExpense(id);
     await refreshExpenses();
@@ -118,12 +123,7 @@ export default function App() {
           )}
 
           {tab === "invoiceNew" && (
-            <InvoiceForm
-              settings={settings}
-              nextNumber={nextInvoiceNumber(settings, invoices)}
-              onCancel={() => setTab("invoices")}
-              onSubmit={handleCreateInvoice}
-            />
+            <InvoiceForm settings={settings} onCancel={() => setTab("invoices")} onSubmit={handleCreateInvoice} />
           )}
 
           {tab === "invoiceDetail" && (
@@ -138,7 +138,12 @@ export default function App() {
           )}
 
           {tab === "expenses" && (
-            <Expenses expenses={expenses} onCreate={handleCreateExpense} onDelete={handleDeleteExpense} />
+            <Expenses
+              expenses={expenses}
+              onCreate={handleCreateExpense}
+              onUpdate={handleUpdateExpense}
+              onDelete={handleDeleteExpense}
+            />
           )}
 
           {tab === "settings" && <SettingsPage settings={settings} onSave={handleSaveSettings} />}

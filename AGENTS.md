@@ -180,6 +180,10 @@ enough to pick up new migrations in production — no manual DB step.
   - `fmtEUR`/`fmtDate` in `utils.ts` take a `lang` ("de"/"en") param and
     format via `Intl`/`toLocaleDateString` — pass the current
     `i18n.language`, or `"de"` explicitly for the invoice document.
+- **Timestamps** are stored as naive-UTC via `dt.datetime.now(dt.UTC).replace(tzinfo=None)` (e.g.,
+  `created_at` in `models.py`). SQLite doesn't persist timezone offsets, and these columns
+  are record-keeping only, not display — naive-UTC is sufficient and avoids deprecated
+  `datetime.utcnow()`. Use this pattern for any future timestamp column.
 - No authentication layer exists — this assumes it's only reachable on
   the home network / VPN. If you add auth, it belongs in
   `backend/app/main.py` as middleware, not scattered per-router.
@@ -246,12 +250,33 @@ npm run typecheck  # tsc -b, no emit — same check as the frontend-typecheck ho
 ```
 
 `backend/tests/test_smoke.py` and `frontend/src/utils.test.ts` /
-`App.slow.test.tsx` are deliberately minimal — they exist to give the
-fast/slow split something real to run, not as coverage. Comprehensive
-coverage (Decimal handling, the `is_kleinunternehmer`/`vat_rate`
-snapshot behavior, invoice-numbering edge cases, etc.) is tracked
-separately; check the GitHub issues before assuming a behavior is
-untested just because it isn't covered yet.
+`App.slow.test.tsx` were originally deliberately minimal placeholders for
+the fast/slow split — issue #17 filled in the comprehensive coverage they
+were standing in for: invoice-numbering sequencing/prefixes/year-scoping
+(`test_invoice_numbering.py`), the `is_kleinunternehmer`/`vat_rate`
+snapshot behavior (`test_invoice_snapshot.py`), Decimal handling end-to-end
+including over the HTTP layer (`test_invoice_decimal_handling.py`),
+`paid_date` set/clear on status changes (`test_invoice_status.py`),
+route-level 404/422 cases (`test_routes_error_cases.py`), locale key
+parity (`test_i18n_parity.py`), `invoiceTotals`/`fmtEUR`/`fmtDate` coverage
+in `utils.test.ts`, and a per-page smoke render under
+`frontend/src/pages/*.test.tsx`. Don't assume a behavior is untested just
+because it predates this list — check for a test file before writing a new
+one.
+
+A trap worth knowing about if you're tempted to freeze `datetime.date.today()`
+in a backend test (e.g. via `monkeypatch.setattr` on a subclass) to simulate
+a year boundary: SQLAlchemy caches each compiled statement's bind
+processors on the module-level `engine`, and the SQLite `Date` type's
+processor closes over `datetime.date` *at that cache's first-compile time*
+to build its `isinstance()` check. A fake `date` subclass swapped in for one
+test can leave a stale processor cached against that specific subclass,
+which then rejects a *different* fake subclass (or the real `datetime.date`)
+in a later test with a confusing `TypeError: SQLite Date type only accepts
+Python date objects as input.` — see the module docstring in
+`test_invoice_numbering.py` for how that test suite works around it instead
+(planting rows for another year directly via the ORM model rather than
+faking "now").
 
 Manually verify UI changes by running the app and hitting the flows in
 the browser too — the test suite is not a substitute for that.

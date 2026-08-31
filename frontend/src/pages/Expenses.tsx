@@ -2,15 +2,24 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { EXPENSE_CATEGORIES, fmtDate, fmtEUR, todayISO, type ExpenseCategory } from "../utils";
 import { IconPlus, IconTrash } from "../components/Icons";
-import type { Expense, ExpenseCreateInput } from "../types";
+import type { Expense, ExpenseCreateInput, ExpenseUpdateInput } from "../types";
 
 interface ExpensesProps {
   expenses: Expense[];
   onCreate: (payload: ExpenseCreateInput) => Promise<void>;
+  onUpdate: (id: number, payload: ExpenseUpdateInput) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
 }
 
-export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps) {
+interface EditingState {
+  id: number;
+  date: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: string;
+}
+
+export default function Expenses({ expenses, onCreate, onUpdate, onDelete }: ExpensesProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const [date, setDate] = useState(todayISO());
@@ -19,6 +28,8 @@ export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps
   const [amount, setAmount] = useState("");
   const [yearFilter, setYearFilter] = useState("all");
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingState, setEditingState] = useState<EditingState | null>(null);
 
   const years = useMemo(
     () => Array.from(new Set(expenses.map((e) => new Date(e.date).getFullYear()))).sort((a, b) => b - a),
@@ -34,6 +45,34 @@ export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps
     await onCreate({ date, category, description, amount: Number(amount) || 0 });
     setDescription("");
     setAmount("");
+  }
+
+  function handleEditStart(expense: Expense) {
+    setEditingId(expense.id);
+    setEditingState({
+      id: expense.id,
+      date: expense.date,
+      category: expense.category as ExpenseCategory,
+      description: expense.description,
+      amount: String(Number(expense.amount)),
+    });
+  }
+
+  async function handleEditSave() {
+    if (!editingState) return;
+    await onUpdate(editingState.id, {
+      date: editingState.date,
+      category: editingState.category,
+      description: editingState.description,
+      amount: Number(editingState.amount) || 0,
+    });
+    setEditingId(null);
+    setEditingState(null);
+  }
+
+  function handleEditCancel() {
+    setEditingId(null);
+    setEditingState(null);
   }
 
   return (
@@ -134,34 +173,99 @@ export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps
             <tbody>
               {sorted.map((e) => (
                 <tr key={e.id}>
-                  <td>{fmtDate(e.date, lang)}</td>
-                  <td>{t(`expenses.categories.${e.category}`, e.category)}</td>
-                  <td>{e.description}</td>
-                  <td className="num">{fmtEUR(e.amount, lang)}</td>
-                  <td>
-                    {confirmId === e.id ? (
-                      <div className="row-actions">
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            onDelete(e.id);
-                            setConfirmId(null);
-                          }}
+                  {editingId === e.id && editingState ? (
+                    <>
+                      <td>
+                        <input
+                          type="date"
+                          value={editingState.date}
+                          onChange={(ev) => setEditingState({ ...editingState, date: ev.target.value })}
+                          style={{ width: "100%" }}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={editingState.category}
+                          onChange={(ev) =>
+                            setEditingState({ ...editingState, category: ev.target.value as ExpenseCategory })
+                          }
+                          style={{ width: "100%" }}
                         >
-                          {t("expenses.confirmDelete")}
-                        </button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(null)}>
-                          {t("common.no")}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(e.id)}>
-                          <IconTrash />
-                        </button>
-                      </div>
-                    )}
-                  </td>
+                          {EXPENSE_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {t(`expenses.categories.${c}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={editingState.description}
+                          onChange={(ev) => setEditingState({ ...editingState, description: ev.target.value })}
+                          style={{ width: "100%" }}
+                        />
+                      </td>
+                      <td className="num">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editingState.amount}
+                          onChange={(ev) => setEditingState({ ...editingState, amount: ev.target.value })}
+                          style={{ width: "100%", textAlign: "right" }}
+                        />
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button className="btn btn-sm btn-primary" onClick={handleEditSave}>
+                            {t("expenses.save")}
+                          </button>
+                          <button className="btn btn-sm btn-ghost" onClick={handleEditCancel}>
+                            {t("expenses.cancel")}
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{fmtDate(e.date, lang)}</td>
+                      <td>{t(`expenses.categories.${e.category}`, e.category)}</td>
+                      <td>{e.description}</td>
+                      <td className="num">{fmtEUR(e.amount, lang)}</td>
+                      <td>
+                        {confirmId === e.id ? (
+                          <div className="row-actions">
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => {
+                                onDelete(e.id);
+                                setConfirmId(null);
+                              }}
+                            >
+                              {t("expenses.confirmDelete")}
+                            </button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(null)}>
+                              {t("common.no")}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="row-actions">
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              onClick={() => handleEditStart(e)}
+                              title={t("expenses.edit")}
+                            >
+                              {t("expenses.edit")}
+                            </button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(e.id)}>
+                              <IconTrash />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
