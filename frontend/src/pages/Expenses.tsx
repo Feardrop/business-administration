@@ -186,7 +186,9 @@ export default function Expenses({ expenses, onCreate, onUpdate, onDelete }: Exp
                       <td>
                         <select
                           value={editingState.category}
-                          onChange={(ev) => setEditingState({ ...editingState, category: ev.target.value as ExpenseCategory })}
+                          onChange={(ev) =>
+                            setEditingState({ ...editingState, category: ev.target.value as ExpenseCategory })
+                          }
                           style={{ width: "100%" }}
                         >
                           {EXPENSE_CATEGORIES.map((c) => (
@@ -216,10 +218,7 @@ export default function Expenses({ expenses, onCreate, onUpdate, onDelete }: Exp
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={handleEditSave}
-                          >
+                          <button className="btn btn-sm btn-primary" onClick={handleEditSave}>
                             {t("expenses.save")}
                           </button>
                           <button className="btn btn-sm btn-ghost" onClick={handleEditCancel}>

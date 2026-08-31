@@ -3,7 +3,6 @@
 from decimal import Decimal
 
 import pytest
-
 from app import crud, schemas
 
 

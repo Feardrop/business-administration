@@ -9,7 +9,15 @@ import InvoiceForm from "./pages/InvoiceForm";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Expenses from "./pages/Expenses";
 import SettingsPage from "./pages/SettingsPage";
-import type { Expense, ExpenseCreateInput, ExpenseUpdateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
+import type {
+  Expense,
+  ExpenseCreateInput,
+  ExpenseUpdateInput,
+  Invoice,
+  InvoiceCreateInput,
+  Settings,
+  Tab,
+} from "./types";
 
 function nextInvoiceNumber(settings: Settings, invoices: Invoice[]): string {
   const year = new Date().getFullYear();
@@ -142,7 +150,12 @@ export default function App() {
           )}
 
           {tab === "expenses" && (
-            <Expenses expenses={expenses} onCreate={handleCreateExpense} onUpdate={handleUpdateExpense} onDelete={handleDeleteExpense} />
+            <Expenses
+              expenses={expenses}
+              onCreate={handleCreateExpense}
+              onUpdate={handleUpdateExpense}
+              onDelete={handleDeleteExpense}
+            />
           )}
 
           {tab === "settings" && <SettingsPage settings={settings} onSave={handleSaveSettings} />}
