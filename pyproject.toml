@@ -1,0 +1,24 @@
+# Tool configuration only — this repo is not a packaged/published Python
+# project (see AGENTS.md: it's a self-hosted single-container app, not a
+# pip package), so there is deliberately no [project] or [build-system]
+# table here.
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["backend/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern is Depends(...) as a default
+# argument value — that's idiomatic here, not the bug B008 looks for.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+markers = [
+    "slow: slower integration-style tests, excluded from the fast pre-commit run (deselect with -m \"not slow\")",
+]

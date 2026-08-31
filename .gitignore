@@ -2,11 +2,18 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 *.egg-info/
+.ruff_cache/
+.pytest_cache/
+.coverage
 
 # Node
 node_modules/
 frontend/dist/
+frontend/coverage/
+frontend/.vitest-attachments/
+*.tsbuildinfo
 
 # SQLite (local dev DBs — production data lives in the mounted ./data volume, also ignored)
 *.db

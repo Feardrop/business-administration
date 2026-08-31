@@ -1,6 +1,7 @@
 """Plain functions doing the actual DB work, kept separate from the
 FastAPI route handlers so the logic is easy to unit test on its own.
 """
+
 import datetime as dt
 from decimal import Decimal
 
@@ -31,11 +32,7 @@ def update_settings(db: Session, data: schemas.SettingsSchema) -> models.Setting
 
 def _next_invoice_number(db: Session, settings: models.Settings) -> str:
     year = dt.date.today().year
-    count = (
-        db.query(models.Invoice)
-        .filter(models.Invoice.number.like(f"%{year}%"))
-        .count()
-    )
+    count = db.query(models.Invoice).filter(models.Invoice.number.like(f"%{year}%")).count()
     prefix = f"{settings.invoice_prefix}-" if settings.invoice_prefix else ""
     return f"{prefix}{year}-{count + 1:03d}"
 
@@ -59,10 +56,7 @@ def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
         vat_rate=Decimal("0") if settings.kleinunternehmer else data.vat_rate,
         note=data.note,
         status="offen",
-        items=[
-            models.InvoiceItem(description=i.description, qty=i.qty, price=i.price)
-            for i in data.items
-        ],
+        items=[models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items],
     )
     db.add(invoice)
     db.commit()
@@ -71,8 +65,8 @@ def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
 
 
 def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
-    invoice.status = status
-    invoice.paid_date = dt.date.today() if status == "bezahlt" else None
+    invoice.status = status  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
+    invoice.paid_date = dt.date.today() if status == "bezahlt" else None  # ty: ignore[invalid-assignment]
     db.commit()
     db.refresh(invoice)
     return invoice

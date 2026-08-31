@@ -1,9 +1,24 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { Tab } from "../types";
 import { ApertureMark, IconDashboard, IconInvoices, IconExpenses, IconSettings } from "./Icons";
 
-export default function Sidebar({ tab, onTab, businessName }) {
+interface SidebarProps {
+  tab: Tab;
+  onTab: (tab: Tab) => void;
+  businessName: string;
+}
+
+interface NavItem {
+  key: Tab;
+  label: string;
+  icon: ReactNode;
+  activeAlso?: Tab[];
+}
+
+export default function Sidebar({ tab, onTab, businessName }: SidebarProps) {
   const { t, i18n } = useTranslation();
-  const items = [
+  const items: NavItem[] = [
     { key: "dashboard", label: t("nav.dashboard"), icon: <IconDashboard /> },
     { key: "invoices", label: t("nav.invoices"), icon: <IconInvoices />, activeAlso: ["invoiceNew", "invoiceDetail"] },
     { key: "expenses", label: t("nav.expenses"), icon: <IconExpenses /> },
@@ -30,8 +45,18 @@ export default function Sidebar({ tab, onTab, businessName }) {
         })}
       </div>
       <div className="lang-switch" aria-label={t("nav.language")}>
-        <button className={`btn btn-sm ${lang === "de" ? "btn-primary" : "btn-ghost"}`} onClick={() => i18n.changeLanguage("de")}>DE</button>
-        <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-ghost"}`} onClick={() => i18n.changeLanguage("en")}>EN</button>
+        <button
+          className={`btn btn-sm ${lang === "de" ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => i18n.changeLanguage("de")}
+        >
+          DE
+        </button>
+        <button
+          className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => i18n.changeLanguage("en")}
+        >
+          EN
+        </button>
       </div>
       <div className="sidebar-foot">{t("nav.footer")}</div>
     </div>

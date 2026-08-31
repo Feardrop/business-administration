@@ -1,0 +1,157 @@
+name: CD
+
+# Fires once CI has passed on a direct push to main - i.e. once a
+# release/vX.Y.Z -> main PR has actually been merged (a PR *into* main
+# running CI on its release/* head branch does not match `branches: [main]`
+# here, so this never fires just because a release PR is green; only the
+# merge itself triggers it). See AGENTS.md's Branching and releasing
+# section for the full development -> release/vX.Y.Z -> main workflow.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: cd-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+jobs:
+  # Nothing here is generated automatically (see AGENTS.md / the sibling
+  # databricks-web-app repo's release model) - a release/vX.Y.Z branch is
+  # expected to have already bumped VERSION and cut over CHANGELOG.md's
+  # [Unreleased] section before it was merged to main. This job just
+  # detects whether *this* push to main introduced a version with no tag
+  # yet, so re-running CD on an unrelated main push (or a re-run) is a
+  # harmless no-op instead of a duplicate release.
+  check-version:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - id: check
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Tag v$VERSION already exists - nothing new to release."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "VERSION file says v$VERSION and that tag doesn't exist yet - releasing."
+          fi
+
+  release:
+    name: Tag + GitHub Release
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Extract this version's CHANGELOG.md section
+        run: python3 .github/scripts/extract_changelog_section.py "$VERSION" > /tmp/release-notes.md
+
+      - name: Tag the release
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        run: gh release create "v$VERSION" --title "v$VERSION" --notes-file /tmp/release-notes.md
+
+  docker-publish:
+    name: Build + push Docker image
+    needs: [check-version, release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Compute lowercase image name
+        # GHCR (like all Docker registries) requires lowercase image
+        # names; github.repository preserves the owner's actual case
+        # ("Feardrop/business-administration").
+        id: image
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ghcr.io/${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=v${{ env.VERSION }}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # The requested post-release step: sync main's state (the version bump,
+  # changelog cutover, and anything else that landed on main - a direct
+  # hotfix, say) back into development via a branch + PR rather than a
+  # direct merge, so it goes through review like everything else.
+  post-release-branch:
+    name: Open post-release sync PR into development
+    needs: [check-version, release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create post-release/vX.Y.Z branch and PR it into development
+        run: |
+          BRANCH="post-release/v$VERSION"
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base development \
+            --head "$BRANCH" \
+            --title "Post-release: sync v$VERSION into development" \
+            --body "Automated post-release sync opened by cd.yaml.
+
+          Brings \`main\`'s state after the \`v$VERSION\` release — the version bump, the CHANGELOG.md cutover, and anything else that landed on \`main\` for this release — back into \`development\`, so the two branches don't drift.
+
+          See AGENTS.md's *Branching and releasing* section for the full \`development\` → \`release/vX.Y.Z\` → \`main\` workflow this is part of."
