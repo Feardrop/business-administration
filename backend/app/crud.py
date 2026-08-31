@@ -16,6 +16,86 @@ from . import models, schemas
 # single-user, low-volume app, so it never fires in practice.
 _MAX_CREATE_ATTEMPTS = 25
 
+# Gross-total threshold (in euros) under which §33 UStDV's
+# "Kleinbetragsrechnung" reduced requirements apply — see
+# _missing_issue_fields below and issue #33.
+KLEINBETRAGSRECHNUNG_THRESHOLD = Decimal("250")
+
+
+class InvoiceIssueValidationError(Exception):
+    """Raised by `issue_invoice` when a draft is missing one or more of the
+    §14 Abs. 4 UStG mandatory invoice fields.
+
+    `missing` is the *complete* list of human-readable (German) messages
+    naming exactly what's missing — every requirement is checked before
+    raising, not just the first one found, so a caller can show the whole
+    checklist in one shot rather than making the user fix issues one at a
+    time. `routers/invoices.py` surfaces this as a 422 with
+    `{"message": ..., "missing_fields": [...]}`.
+    """
+
+    def __init__(self, missing: list[str]):
+        self.missing = missing
+        message = "Rechnung kann nicht ausgestellt werden – Pflichtangaben fehlen: " + ", ".join(missing)
+        super().__init__(message)
+
+
+def _invoice_gross_total(invoice: models.Invoice, kleinunternehmer: bool) -> Decimal:
+    """The gross total an invoice will have once issued, given whether the
+    Kleinunternehmer exemption applies — used only to decide whether the
+    §33 UStDV Kleinbetragsrechnung threshold kicks in (see
+    `_missing_issue_fields`), not as a general-purpose totals API (the
+    frontend's `invoiceTotals` in utils.ts owns display-side totals).
+    """
+    total = Decimal("0")
+    for item in invoice.items:
+        net = Decimal(item.qty) * Decimal(item.price)
+        rate = Decimal("0") if kleinunternehmer else Decimal(item.vat_rate or 0)
+        total += net * (Decimal("1") + rate / Decimal("100"))
+    return total
+
+
+def _missing_issue_fields(invoice: models.Invoice, settings: models.Settings) -> list[str]:
+    """The §14 Abs. 4 UStG mandatory-field checklist for `issue_invoice`.
+
+    Returns every currently-missing requirement (German, human-readable) —
+    empty list means the draft may be issued. `number`, `date`/`issued_at`
+    are not checked here: they're always present by construction
+    (`_next_invoice_number`/`issue_invoice` assign them unconditionally).
+    """
+    missing: list[str] = []
+
+    # Supplier details (from Settings) — same fields the dashboard banner
+    # in frontend/src/pages/Dashboard.tsx warns about.
+    if not (settings.business_name or "").strip():
+        missing.append("Firmenname (Einstellungen)")
+    if not (settings.address or "").strip():
+        missing.append("Anschrift (Einstellungen)")
+    if not (settings.tax_number or "").strip() and not (settings.ust_id_nr or "").strip():
+        missing.append("Steuernummer oder USt-IdNr (Einstellungen)")
+
+    # Recipient. client_name is already NOT NULL at the DB/schema level, but
+    # nothing stops it being blank/whitespace, so check defensively.
+    if not (invoice.client_name or "").strip():
+        missing.append("Kunde – Name")
+    # client_address is only mandatory above the Kleinbetragsrechnung
+    # threshold (§33 UStDV) — under it, the reduced requirements apply and
+    # the recipient's address may be omitted (though nothing stops the user
+    # from including it anyway).
+    gross = _invoice_gross_total(invoice, bool(settings.kleinunternehmer))
+    if gross >= KLEINBETRAGSRECHNUNG_THRESHOLD and not (invoice.client_address or "").strip():
+        missing.append("Kunde – Anschrift (ab 250 € Gesamtbetrag)")
+
+    # §14 Abs. 4 Nr. 6 UStG: the service date, or — for a period like "shot
+    # in August, invoiced in September" — a free-text period suffices.
+    if invoice.service_date is None and not (invoice.service_period_text or "").strip():
+        missing.append("Leistungsdatum oder Leistungszeitraum")
+
+    if not invoice.items:
+        missing.append("Mindestens eine Position")
+
+    return missing
+
 
 def get_settings(db: Session) -> models.Settings:
     settings = db.get(models.Settings, 1)
@@ -88,11 +168,15 @@ def create_draft(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
         date=data.date,
         client_name=data.client_name,
         client_address=data.client_address,
+        service_date=data.service_date,
+        service_period_text=data.service_period_text,
         is_kleinunternehmer=None,
-        vat_rate=data.vat_rate,
         note=data.note,
         status="draft",
-        items=[models.InvoiceItem(description=i.description, qty=i.qty, price=i.price) for i in data.items],
+        items=[
+            models.InvoiceItem(description=i.description, qty=i.qty, price=i.price, vat_rate=i.vat_rate)
+            for i in data.items
+        ],
     )
     db.add(invoice)
     db.commit()
@@ -114,10 +198,12 @@ def update_invoice_draft(db: Session, invoice: models.Invoice, data: schemas.Inv
 
 
 def issue_invoice(db: Session, invoice: models.Invoice) -> models.Invoice:
-    """The one-way draft -> offen transition: assign the number, snapshot
-    settings, stamp the issue date, and lock the record.
+    """Assign a number/sequence to a draft and transition it to "offen".
 
-    Caller must ensure `invoice` is currently a draft.
+    Caller must ensure `invoice` is currently a draft. Raises
+    `InvoiceIssueValidationError` (see `_missing_issue_fields`) instead of
+    mutating anything if a mandatory field is absent — issuing is all-or-
+    nothing.
 
     Number assignment and the commit happen in the same attempt, guarded by
     a retry-on-IntegrityError loop: two (or more) near-simultaneous issues
@@ -129,6 +215,9 @@ def issue_invoice(db: Session, invoice: models.Invoice) -> models.Invoice:
     something is genuinely wrong.
     """
     settings = get_settings(db)
+    missing = _missing_issue_fields(invoice, settings)
+    if missing:
+        raise InvoiceIssueValidationError(missing)
 
     # `db.rollback()` on a collision expires every attribute on `invoice`
     # (it's still the same session-managed instance the caller passed in),
@@ -138,7 +227,13 @@ def issue_invoice(db: Session, invoice: models.Invoice) -> models.Invoice:
     last_error: IntegrityError | None = None
     for _attempt in range(_MAX_CREATE_ATTEMPTS):
         invoice.is_kleinunternehmer = settings.kleinunternehmer
-        invoice.vat_rate = Decimal("0") if settings.kleinunternehmer else invoice.vat_rate  # ty: ignore[invalid-assignment]
+        if settings.kleinunternehmer:
+            # Zero every line's vat_rate, the same way this used to zero the
+            # single invoice-level vat_rate — is_kleinunternehmer already
+            # gates display, but this keeps the stored rate consistent with
+            # reality.
+            for item in invoice.items:
+                item.vat_rate = Decimal("0")
         invoice.issued_at = dt.date.today()  # ty: ignore[invalid-assignment]
         invoice.status = "offen"  # ty: ignore[invalid-assignment]
         invoice.sequence, invoice.number = _next_invoice_number(db, settings)  # ty: ignore[invalid-assignment]

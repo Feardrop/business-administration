@@ -123,7 +123,8 @@ def test_delete_issued_invoice_returns_409(client):
 
 def test_settings_changed_after_issue_dont_affect_invoice(client):
     _make_settings(client, kleinunternehmer=True)
-    payload = _create_payload(items=[{"description": "Shoot", "qty": "1", "price": "100.00", "vat_rate": "19"}])
+    item = {"description": "Shoot", "qty": "1", "price": "100.00", "vat_rate": "19"}
+    payload = _create_payload(items=[item])
     created = client.post("/api/invoices", json=payload).json()
     issued = client.post(f"/api/invoices/{created['id']}/issue").json()
 
@@ -229,16 +230,17 @@ def test_mixed_vat_rate_invoice_totals(client):
     issued = client.post(f"/api/invoices/{created['id']}/issue").json()
     assert issued["status"] == "offen"
 
-    by_rate: dict[str, Decimal] = {}
+    by_rate: dict[Decimal, Decimal] = {}
     for item in issued["items"]:
+        rate = Decimal(item["vat_rate"])
         net = Decimal(item["qty"]) * Decimal(item["price"])
-        by_rate[item["vat_rate"]] = by_rate.get(item["vat_rate"], Decimal("0")) + net
+        by_rate[rate] = by_rate.get(rate, Decimal("0")) + net
 
     assert by_rate[Decimal("19.00")] == Decimal("100.00")
     assert by_rate[Decimal("7.00")] == Decimal("50.00")
 
     gross = sum(
-        Decimal(item["qty"]) * Decimal(item["price"]) * (Decimal("1") + Decimal(item["vat_rate"]) / Decimal("100"))
+        Decimal(item["qty"]) * Decimal(item["price"]) * (Decimal("1") + Decimal(item["vat_rate"]) / 100)
         for item in issued["items"]
     )
     assert gross == Decimal("100.00") * Decimal("1.19") + Decimal("50.00") * Decimal("1.07")
@@ -249,7 +251,8 @@ def test_kleinbetragsrechnung_relaxes_address_requirement_under_threshold(client
     client_address must not block issuing.
     """
     _make_settings(client, kleinunternehmer=True)
-    payload = _create_payload(client_address="", items=[{"description": "Shoot", "qty": "1", "price": "100.00"}])
+    item = {"description": "Shoot", "qty": "1", "price": "100.00"}
+    payload = _create_payload(client_address="", items=[item])
     created = client.post("/api/invoices", json=payload).json()
     assert created["client_address"] == ""
 
@@ -263,7 +266,8 @@ def test_kleinbetragsrechnung_requires_address_at_or_above_threshold(client):
     mandatory again.
     """
     _make_settings(client, kleinunternehmer=True)
-    payload = _create_payload(client_address="", items=[{"description": "Shoot", "qty": "1", "price": "250.00"}])
+    item = {"description": "Shoot", "qty": "1", "price": "250.00"}
+    payload = _create_payload(client_address="", items=[item])
     created = client.post("/api/invoices", json=payload).json()
 
     resp = client.post(f"/api/invoices/{created['id']}/issue")

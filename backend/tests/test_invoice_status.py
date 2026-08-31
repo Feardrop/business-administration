@@ -13,11 +13,17 @@ from app import crud, schemas
 
 
 def _create_invoice(db_session):
+    crud.update_settings(
+        db_session,
+        schemas.SettingsSchema(business_name="Status Studio", address="Teststr. 1", tax_number="DE123456789"),
+    )
     draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-02-01",
             client_name="Status Client",
+            client_address="Client street 1",
+            service_date=dt.date(2026, 2, 1),
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("250"))],
         ),
     )

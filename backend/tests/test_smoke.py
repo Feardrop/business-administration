@@ -6,6 +6,7 @@ CI pipeline's fast-tests/slow-tests distinction has something real to run
 before #17 lands.
 """
 
+import datetime as dt
 from decimal import Decimal
 
 import pytest
@@ -14,11 +15,16 @@ from app import crud, schemas
 
 def test_first_invoice_of_the_year_gets_sequence_one(db_session):
     """Fast unit-level test: no HTTP layer, exercises crud directly."""
+    crud.update_settings(
+        db_session,
+        schemas.SettingsSchema(business_name="Test Studio", address="Teststr. 1", tax_number="DE123456789"),
+    )
     draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-01-15",
             client_name="Test Client",
+            service_date=dt.date(2026, 1, 15),
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("100"))],
         ),
     )

@@ -41,6 +41,10 @@ class Settings(Base):
     owner_name = Column(String, default="")
     address = Column(Text, default="")
     tax_number = Column(String, default="")
+    # Umsatzsteuer-Identifikationsnummer — separate from tax_number
+    # (Steuernummer): many small Kleingewerbe businesses never apply for one,
+    # so this stays optional and is printed only when set (see issue #33).
+    ust_id_nr = Column(String, default="")
     iban = Column(String, default="")
     kleinunternehmer = Column(Boolean, default=True, nullable=False)
     prev_year_revenue = Column(Numeric(10, 2), default=0)
@@ -91,10 +95,19 @@ class Invoice(Base):
     date = Column(Date, nullable=False)
     client_name = Column(String, nullable=False)
     client_address = Column(Text, default="")
+    # §14 Abs. 4 Nr. 6 UStG: the invoice must state *when the service was
+    # rendered*, which is not necessarily `date` (the document/issue date).
+    # Exactly one of these two is expected to be set — an exact day
+    # (service_date) or a free-text period like "August 2026"
+    # (service_period_text) for work that spans/settles later than it was
+    # performed. Both nullable while a draft; crud.issue_invoice requires at
+    # least one to be set before issuing (service_date wins if somehow both
+    # are). See issue #33.
+    service_date = Column(Date, nullable=True)
+    service_period_text = Column(String, nullable=True)
     # Null while the invoice is a draft; snapshotted from settings at issue
     # time (see crud.issue_invoice) and immutable afterward.
     is_kleinunternehmer = Column(Boolean, nullable=True)
-    vat_rate = Column(Numeric(5, 2), default=0)
     note = Column(Text, default="")
     status = Column(String, default="draft")  # see class docstring for the full lifecycle
     paid_date = Column(Date, nullable=True)
@@ -121,6 +134,11 @@ class InvoiceItem(Base):
     description = Column(String, nullable=False)
     qty = Column(Numeric(10, 2), nullable=False, default=1)
     price = Column(Numeric(10, 2), nullable=False, default=0)  # net unit price
+    # Moved here from Invoice (issue #33): mixing rates on one invoice (e.g.
+    # 19% shooting fee + 7% image-licence line) is normal for this business
+    # and previously forced splitting across two invoices. Default 0 matches
+    # the old Invoice.vat_rate column's default, for the migration backfill.
+    vat_rate = Column(Numeric(5, 2), nullable=False, default=0)
 
     invoice = relationship("Invoice", back_populates="items")
 

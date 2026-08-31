@@ -27,6 +27,10 @@ class SettingsSchema(BaseModel):
     owner_name: str = ""
     address: str = ""
     tax_number: str = ""
+    # Umsatzsteuer-Identifikationsnummer, separate from tax_number — many
+    # small Kleingewerbe businesses don't have one, so this stays optional
+    # and is only printed on the invoice when set (issue #33).
+    ust_id_nr: str = ""
     iban: str = ""
     kleinunternehmer: bool = True
     prev_year_revenue: Decimal = Decimal("0")
@@ -37,6 +41,10 @@ class InvoiceItemIn(BaseModel):
     description: str
     qty: Decimal
     price: Decimal
+    # One VAT rate per line (issue #33) — mixing 19%/7% lines on a single
+    # invoice is normal for this business. Default matches the old
+    # Invoice-level vat_rate column's default (0).
+    vat_rate: Decimal = Decimal("0")
 
 
 class InvoiceItemOut(InvoiceItemIn):
@@ -50,15 +58,23 @@ class InvoiceCreate(BaseModel):
     Nothing here is burned: no number is assigned and no settings are
     snapshotted until the draft is issued (`POST
     /api/invoices/{id}/issue`) — see crud.create_draft / crud.issue_invoice.
-    `vat_rate` is the rate the user picked in the form; it is kept as-is on
-    the draft and only zeroed out at issue time if settings.kleinunternehmer
-    is true then.
+    `vat_rate` lives per-item now (see InvoiceItemIn); it is kept as-is on
+    the draft and only zeroed out per item at issue time if
+    settings.kleinunternehmer is true then.
+
+    `service_date`/`service_period_text` (§14 Abs. 4 Nr. 6 UStG) are
+    optional on a draft but required — at least one of them — before the
+    draft can be issued; see crud.issue_invoice's validation. The UI is
+    expected to let the user pick only one of the two (an exact date or a
+    free-text period), but nothing here enforces mutual exclusivity — if
+    both are somehow set, service_date takes priority when printing.
     """
 
     date: dt.date
     client_name: str
     client_address: str = ""
-    vat_rate: Decimal = Decimal("0")
+    service_date: dt.date | None = None
+    service_period_text: str | None = None
     note: str = ""
     items: list[InvoiceItemIn]
 
@@ -75,7 +91,8 @@ class InvoiceUpdate(BaseModel):
     date: dt.date | None = None
     client_name: str | None = None
     client_address: str | None = None
-    vat_rate: Decimal | None = None
+    service_date: dt.date | None = None
+    service_period_text: str | None = None
     note: str | None = None
     items: list[InvoiceItemIn] | None = None
 
@@ -88,8 +105,9 @@ class InvoiceOut(BaseModel):
     date: dt.date
     client_name: str
     client_address: str
+    service_date: dt.date | None
+    service_period_text: str | None
     is_kleinunternehmer: bool | None
-    vat_rate: Decimal
     note: str
     status: InvoiceStatus
     paid_date: dt.date | None

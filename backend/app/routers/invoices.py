@@ -44,7 +44,19 @@ def issue_invoice(invoice_id: int, db: Session = Depends(get_db)):
     invoice = _get_or_404(db, invoice_id)
     if invoice.status != "draft":
         raise HTTPException(409, "Nur Entwürfe können ausgestellt werden.")
-    return crud.issue_invoice(db, invoice)
+    try:
+        return crud.issue_invoice(db, invoice)
+    except crud.InvoiceIssueValidationError as exc:
+        # Structured so the frontend (and issue #26, which builds on this
+        # shape) can show precisely what's missing rather than a generic
+        # "invalid" message.
+        raise HTTPException(
+            422,
+            detail={
+                "message": "Rechnung kann nicht ausgestellt werden – Pflichtangaben nach §14 UStG fehlen.",
+                "missing_fields": exc.missing,
+            },
+        ) from exc
 
 
 @router.post("/{invoice_id}/mark-paid", response_model=schemas.InvoiceOut)
