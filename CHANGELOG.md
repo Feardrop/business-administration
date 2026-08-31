@@ -11,6 +11,22 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Added
 
+- Draft invoice status (issue #25): new invoices now start as editable,
+  numberless drafts instead of immediately burning an invoice number.
+  Nothing is assigned — no `number`, no `is_kleinunternehmer`/`vat_rate`
+  settings snapshot — until the draft is explicitly issued
+  (`POST /api/invoices/{id}/issue`), which is the one-way transition that
+  assigns the number, snapshots settings, stamps `issued_at`, and locks
+  the record. Drafts can be freely edited (`PATCH /api/invoices/{id}`) or
+  deleted; issued invoices are immutable via either route (409). An
+  abandoned/deleted draft never consumes a number slot, so the sequence
+  stays gap-free (GoBD). The frontend gained a "Save draft"/"Issue" pair
+  of actions on the invoice form, a draft badge on the invoice list, and
+  edit/issue/delete actions on the invoice detail page gated on draft
+  status. The status column's target lifecycle now also documents
+  "teilweise bezahlt" and "storniert" as future states for the
+  cancellation (#26) and partial-payment (#30) issues stacked on top of
+  this one, though neither is implemented yet.
 - German/English i18n throughout the UI (i18next/react-i18next), with the
   printable invoice document intentionally staying German regardless of
   the selected language, since it's the legal document under German tax

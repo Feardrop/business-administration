@@ -38,6 +38,7 @@ const invoices: Invoice[] = [
     note: "",
     status: "bezahlt",
     paid_date: "2026-01-20",
+    issued_at: "2026-01-15",
     created_at: "2026-01-15T10:00:00",
     items: [{ id: 1, description: "Shoot", qty: "1", price: "500" }],
   },

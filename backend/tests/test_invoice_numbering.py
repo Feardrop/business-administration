@@ -28,7 +28,7 @@ from app.database import SessionLocal
 
 
 def _make_invoice(db, client_name="Client"):
-    return crud.create_invoice(
+    draft = crud.create_draft(
         db,
         schemas.InvoiceCreate(
             date="2026-01-15",
@@ -36,6 +36,7 @@ def _make_invoice(db, client_name="Client"):
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("100"))],
         ),
     )
+    return crud.issue_invoice(db, draft)
 
 
 def test_delete_middle_then_create_reuses_no_number(db_session):

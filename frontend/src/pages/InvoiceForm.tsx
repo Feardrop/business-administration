@@ -2,12 +2,21 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { fmtEUR, todayISO } from "../utils";
 import { IconBack, IconPlus } from "../components/Icons";
-import type { InvoiceCreateInput, Settings } from "../types";
+import type { Invoice, InvoiceCreateInput, Settings } from "../types";
 
 interface InvoiceFormProps {
   settings: Settings;
+  // The draft being edited, or null/undefined for a brand-new invoice.
+  // Only ever a draft — issued invoices are immutable via this form (the
+  // caller is responsible for not routing here for a non-draft).
+  invoice?: Invoice | null;
   onCancel: () => void;
-  onSubmit: (payload: InvoiceCreateInput) => Promise<void>;
+  // Persists the current form contents as a draft (create or PATCH,
+  // depending on whether `invoice` was passed) without issuing it.
+  onSaveDraft: (payload: InvoiceCreateInput) => Promise<void>;
+  // Persists the current form contents, then issues the invoice — the
+  // one-way transition that assigns the number and locks the record.
+  onIssue: (payload: InvoiceCreateInput) => Promise<void>;
 }
 
 interface FormItem {
@@ -16,16 +25,22 @@ interface FormItem {
   price: number | string;
 }
 
-export default function InvoiceForm({ settings, onCancel, onSubmit }: InvoiceFormProps) {
+export default function InvoiceForm({ settings, invoice, onCancel, onSaveDraft, onIssue }: InvoiceFormProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
-  const [date, setDate] = useState(todayISO());
-  const [clientName, setClientName] = useState("");
-  const [clientAddress, setClientAddress] = useState("");
-  const [note, setNote] = useState("");
-  const [vatRate, setVatRate] = useState("19");
-  const [items, setItems] = useState<FormItem[]>([{ desc: "", qty: 1, price: 0 }]);
+  const isEditing = Boolean(invoice);
+  const [date, setDate] = useState(invoice?.date || todayISO());
+  const [clientName, setClientName] = useState(invoice?.client_name || "");
+  const [clientAddress, setClientAddress] = useState(invoice?.client_address || "");
+  const [note, setNote] = useState(invoice?.note || "");
+  const [vatRate, setVatRate] = useState(invoice?.vat_rate ? String(Number(invoice.vat_rate)) : "19");
+  const [items, setItems] = useState<FormItem[]>(
+    invoice?.items?.length
+      ? invoice.items.map((it) => ({ desc: it.description, qty: it.qty, price: it.price }))
+      : [{ desc: "", qty: 1, price: 0 }]
+  );
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState<"draft" | "issue" | null>(null);
 
   const net = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
   const vat = settings.kleinunternehmer ? 0 : (net * Number(vatRate)) / 100;
@@ -40,27 +55,51 @@ export default function InvoiceForm({ settings, onCancel, onSubmit }: InvoiceFor
     setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError("");
+  function buildPayload(): InvoiceCreateInput | null {
     const cleanItems = items
       .map((it) => ({ description: (it.desc || "").trim(), qty: Number(it.qty) || 0, price: Number(it.price) || 0 }))
       .filter((it) => it.description !== "" || it.qty > 0 || it.price > 0);
     if (cleanItems.length === 0) {
       setError(t("invoiceForm.validationNeedsItem"));
-      return;
+      return null;
     }
+    return {
+      date,
+      client_name: clientName,
+      client_address: clientAddress,
+      vat_rate: settings.kleinunternehmer ? 0 : Number(vatRate),
+      note,
+      items: cleanItems,
+    };
+  }
+
+  async function handleSaveDraft(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    const payload = buildPayload();
+    if (!payload) return;
+    setSubmitting("draft");
     try {
-      await onSubmit({
-        date,
-        client_name: clientName,
-        client_address: clientAddress,
-        vat_rate: settings.kleinunternehmer ? 0 : Number(vatRate),
-        note,
-        items: cleanItems,
-      });
+      await onSaveDraft(payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("invoiceForm.saveError"));
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
+  async function handleIssue(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    const payload = buildPayload();
+    if (!payload) return;
+    setSubmitting("issue");
+    try {
+      await onIssue(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("invoiceForm.saveError"));
+    } finally {
+      setSubmitting(null);
     }
   }
 
@@ -73,14 +112,14 @@ export default function InvoiceForm({ settings, onCancel, onSubmit }: InvoiceFor
           </button>
         </div>
       </div>
-      <h2 style={{ marginBottom: 16 }}>{t("invoiceForm.title")}</h2>
+      <h2 style={{ marginBottom: 16 }}>{isEditing ? t("invoiceForm.titleEdit") : t("invoiceForm.title")}</h2>
       {error && <div className="banner banner-amber">{error}</div>}
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSaveDraft}>
         <div className="card">
           <div className="field-row">
             <div className="field">
               <label>{t("invoiceForm.numberLabel")}</label>
-              <input type="text" className="mono" placeholder={t("invoiceForm.numberPlaceholder")} disabled />
+              <input type="text" className="mono" value={invoice?.number || t("invoiceForm.numberPending")} disabled />
             </div>
             <div className="field">
               <label>{t("invoiceForm.dateLabel")}</label>
@@ -195,8 +234,11 @@ export default function InvoiceForm({ settings, onCancel, onSubmit }: InvoiceFor
         </div>
 
         <div className="actions" style={{ marginTop: 6 }}>
-          <button type="submit" className="btn btn-primary">
-            {t("invoiceForm.submit")}
+          <button type="submit" className="btn" disabled={submitting !== null}>
+            {t("invoiceForm.saveDraft")}
+          </button>
+          <button type="button" className="btn btn-primary" disabled={submitting !== null} onClick={handleIssue}>
+            {t("invoiceForm.issue")}
           </button>
         </div>
       </form>

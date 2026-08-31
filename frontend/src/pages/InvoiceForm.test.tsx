@@ -27,12 +27,19 @@ const settings: Settings = {
 
 describe("InvoiceForm", () => {
   it("shows a VAT-rate selector when not a Kleinunternehmer", () => {
-    render(<InvoiceForm settings={settings} onCancel={vi.fn()} onSubmit={vi.fn()} />);
+    render(<InvoiceForm settings={settings} onCancel={vi.fn()} onSaveDraft={vi.fn()} onIssue={vi.fn()} />);
     expect(screen.getByText(/19 %/)).toBeInTheDocument();
   });
 
   it("hides the VAT-rate selector for a Kleinunternehmer", () => {
-    render(<InvoiceForm settings={{ ...settings, kleinunternehmer: true }} onCancel={vi.fn()} onSubmit={vi.fn()} />);
+    render(
+      <InvoiceForm
+        settings={{ ...settings, kleinunternehmer: true }}
+        onCancel={vi.fn()}
+        onSaveDraft={vi.fn()}
+        onIssue={vi.fn()}
+      />
+    );
     expect(screen.queryByText(/19 %/)).not.toBeInTheDocument();
   });
 });

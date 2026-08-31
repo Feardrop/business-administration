@@ -16,7 +16,7 @@ from app import crud, schemas
 
 def _create_invoice(db_session):
     crud.update_settings(db_session, schemas.SettingsSchema(kleinunternehmer=False))
-    return crud.create_invoice(
+    draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-04-01",
@@ -28,6 +28,7 @@ def _create_invoice(db_session):
             ],
         ),
     )
+    return crud.issue_invoice(db_session, draft)
 
 
 def test_item_qty_and_price_are_decimal_on_the_freshly_created_object(db_session):

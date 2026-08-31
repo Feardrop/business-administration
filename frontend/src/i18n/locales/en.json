@@ -7,6 +7,7 @@
     "yes": "Yes",
     "no": "No",
     "delete": "Delete",
+    "edit": "Edit",
     "view": "View",
     "all": "All",
     "year": "Year",
@@ -68,14 +69,17 @@
     "emptyText": "Create your first invoice as soon as you have your first job.",
     "resetToOpen": "Reset",
     "statusPaid": "paid",
-    "statusOpen": "open"
+    "statusOpen": "open",
+    "statusDraft": "Draft",
+    "numberPending": "–"
   },
   "invoiceForm": {
     "validationNeedsItem": "Please enter at least one line item.",
     "saveError": "Error while saving.",
     "title": "New invoice",
+    "titleEdit": "Edit draft",
     "numberLabel": "Invoice number",
-    "numberPlaceholder": "assigned on save",
+    "numberPending": "assigned when issued",
     "dateLabel": "Invoice date",
     "clientNameLabel": "Client – name / company",
     "clientNamePlaceholder": "e.g. Sample Ltd.",
@@ -96,10 +100,12 @@
     "total": "Total amount",
     "noteLabel": "Note (optional, doesn't appear on the invoice)",
     "notePlaceholder": "e.g. internal note",
-    "submit": "Create invoice"
+    "saveDraft": "Save draft",
+    "issue": "Issue invoice"
   },
   "invoiceDetail": {
     "notFound": "Invoice not found.",
+    "issue": "Issue",
     "markOpen": "Mark as open",
     "print": "Print / save as PDF",
     "confirmDeleteText": "Really delete this invoice?",

@@ -1,4 +1,12 @@
-import type { Expense, ExpenseCreateInput, ExpenseUpdateInput, Invoice, InvoiceCreateInput, Settings } from "./types";
+import type {
+  Expense,
+  ExpenseCreateInput,
+  ExpenseUpdateInput,
+  Invoice,
+  InvoiceCreateInput,
+  InvoiceUpdateInput,
+  Settings,
+} from "./types";
 
 const BASE = "/api";
 
@@ -27,8 +35,12 @@ export const api = {
 
   listInvoices: () => request<Invoice[]>("/invoices"),
   getInvoice: (id: number) => request<Invoice>(`/invoices/${id}`),
+  // Creates a draft — nothing is issued/numbered yet, see InvoiceUpdateInput.
   createInvoice: (data: InvoiceCreateInput) =>
     request<Invoice>("/invoices", { method: "POST", body: JSON.stringify(data) }),
+  updateInvoiceDraft: (id: number, data: InvoiceUpdateInput) =>
+    request<Invoice>(`/invoices/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  issueInvoice: (id: number) => request<Invoice>(`/invoices/${id}/issue`, { method: "POST" }),
   markInvoicePaid: (id: number) => request<Invoice>(`/invoices/${id}/mark-paid`, { method: "POST" }),
   markInvoiceOpen: (id: number) => request<Invoice>(`/invoices/${id}/mark-open`, { method: "POST" }),
   deleteInvoice: (id: number) => request<null>(`/invoices/${id}`, { method: "DELETE" }),

@@ -105,7 +105,7 @@ def update_invoice_draft(db: Session, invoice: models.Invoice, data: schemas.Inv
     update_data = data.model_dump(exclude_unset=True)
     items_data = update_data.pop("items", None)
     for field, value in update_data.items():
-        setattr(invoice, field, value)  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
+        setattr(invoice, field, value)
     if items_data is not None:
         invoice.items = [models.InvoiceItem(**item) for item in items_data]
     db.commit()

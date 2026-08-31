@@ -21,7 +21,7 @@ def test_invoice_created_at_no_deprecation_warning(db_session):
     """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        crud.create_invoice(
+        crud.create_draft(
             db_session,
             schemas.InvoiceCreate(
                 date="2026-01-15",
@@ -49,7 +49,7 @@ def test_invoice_created_at_is_naive_utc(db_session):
     SQLite compatibility, since SQLite doesn't persist timezone information.
     """
     before = dt.datetime.now(dt.UTC).replace(tzinfo=None)
-    invoice = crud.create_invoice(
+    invoice = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-01-15",
@@ -80,7 +80,7 @@ def test_invoice_created_at_persistence(db_session):
     Regression test for issue #14: Ensure that existing rows read back with
     the same naive-UTC value (no accidental format change or timezone shift).
     """
-    invoice = crud.create_invoice(
+    invoice = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-01-15",

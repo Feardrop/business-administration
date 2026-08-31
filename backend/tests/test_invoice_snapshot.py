@@ -4,7 +4,7 @@
 AGENTS.md calls this out explicitly as deliberate: an invoice must keep
 showing what was actually true at the moment it was issued, even if the
 Kleinunternehmer setting is flipped afterwards. This is a backfill against
-existing, unmodified behavior — `create_invoice` already snapshots correctly
+existing, unmodified behavior — `issue_invoice` already snapshots correctly
 — but nothing currently protects it from regressing into a live join against
 `settings`, which is exactly what these tests would catch.
 """
@@ -15,7 +15,7 @@ from app import crud, schemas
 
 
 def _create_invoice(db_session, vat_rate=Decimal("19")):
-    return crud.create_invoice(
+    draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-03-01",
@@ -24,12 +24,13 @@ def _create_invoice(db_session, vat_rate=Decimal("19")):
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("500"))],
         ),
     )
+    return crud.issue_invoice(db_session, draft)
 
 
 def test_invoice_snapshots_settings_at_creation_time(db_session):
     """A newly created invoice copies the *current* settings values.
 
-    Would fail if `create_invoice` ignored `settings.kleinunternehmer` or
+    Would fail if `issue_invoice` ignored `settings.kleinunternehmer` or
     the submitted `vat_rate` and used different/default values instead.
     """
     crud.update_settings(db_session, schemas.SettingsSchema(kleinunternehmer=False))
@@ -42,7 +43,7 @@ def test_invoice_snapshots_settings_at_creation_time(db_session):
 def test_kleinunternehmer_invoice_ignores_submitted_vat_rate(db_session):
     """While Kleinunternehmer is active, `vat_rate` is forced to 0.
 
-    Would fail if `create_invoice` stored the caller-submitted `vat_rate`
+    Would fail if `issue_invoice` stored the caller-submitted `vat_rate`
     verbatim even when `settings.kleinunternehmer` is True.
     """
     crud.update_settings(db_session, schemas.SettingsSchema(kleinunternehmer=True))

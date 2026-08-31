@@ -36,6 +36,7 @@ const invoice: Invoice = {
   note: "",
   status: "offen",
   paid_date: null,
+  issued_at: "2026-01-15",
   created_at: "2026-01-15T10:00:00",
   items: [{ id: 1, description: "Shoot", qty: "1", price: "500" }],
 };
@@ -47,6 +48,8 @@ describe("InvoiceDetail", () => {
         invoice={null}
         settings={settings}
         onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onIssue={vi.fn()}
         onMarkPaid={vi.fn()}
         onMarkOpen={vi.fn()}
         onDelete={vi.fn()}
@@ -61,6 +64,8 @@ describe("InvoiceDetail", () => {
         invoice={invoice}
         settings={settings}
         onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onIssue={vi.fn()}
         onMarkPaid={vi.fn()}
         onMarkOpen={vi.fn()}
         onDelete={vi.fn()}

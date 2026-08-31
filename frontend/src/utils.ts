@@ -46,7 +46,12 @@ export function isoYear(iso: string | null | undefined): number {
 }
 
 export interface InvoiceTotalsInput {
-  is_kleinunternehmer: boolean;
+  // Null on a still-unissued draft (see types.ts's Invoice.is_kleinunternehmer).
+  // Callers displaying a draft's provisional totals should resolve this
+  // against the current setting first (e.g. `inv.is_kleinunternehmer ??
+  // settings.kleinunternehmer`) rather than relying on a snapshot that
+  // doesn't exist yet — null is treated the same as false here.
+  is_kleinunternehmer: boolean | null;
   vat_rate: number | string;
   items?: { qty: number | string; price: number | string }[];
 }

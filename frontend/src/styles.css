@@ -374,6 +374,11 @@ th.num {
   background: var(--accent-soft);
   color: var(--accent);
 }
+.badge-draft {
+  background: var(--paper-alt);
+  color: var(--ink-soft);
+  border: 1px dashed var(--line-strong);
+}
 
 .empty {
   padding: 30px 10px;

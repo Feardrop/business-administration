@@ -29,19 +29,35 @@ export interface InvoiceItemInput {
   price: number | string;
 }
 
-export type InvoiceStatus = "offen" | "bezahlt";
+// Full target status lifecycle (see backend/app/schemas.py's InvoiceStatus
+// comment / backend/app/models.py's Invoice docstring for the diagram):
+//   draft --issue--> offen --pay--> bezahlt
+//     |                 |
+//     +--delete         +--cancel--> storniert          (future issue #26)
+//     offen --partial payment--> teilweise bezahlt --(pay rest)--> bezahlt
+//                                                                  (#30)
+//     teilweise bezahlt --cancel--> storniert                     (#26)
+// Only "draft" | "offen" | "bezahlt" are actually produced by this app
+// today — "teilweise bezahlt" and "storniert" are listed so the type
+// doesn't need another breaking change once #26/#30 land.
+export type InvoiceStatus = "draft" | "offen" | "teilweise bezahlt" | "bezahlt" | "storniert";
 
 export interface Invoice {
   id: number;
-  number: string;
+  // Null while status is "draft" — assigned once, at issue time, and
+  // never changed again.
+  number: string | null;
   date: string;
   client_name: string;
   client_address: string;
-  is_kleinunternehmer: boolean;
+  // Null while status is "draft" — snapshotted from settings at issue
+  // time and immutable afterward.
+  is_kleinunternehmer: boolean | null;
   vat_rate: string;
   note: string;
   status: InvoiceStatus;
   paid_date: string | null;
+  issued_at: string | null;
   created_at: string;
   items: InvoiceItem[];
 }
@@ -53,6 +69,18 @@ export interface InvoiceCreateInput {
   vat_rate?: number;
   note?: string;
   items: InvoiceItemInput[];
+}
+
+// Partial update for a draft (PATCH /api/invoices/{id}) — mirrors
+// backend/app/schemas.py's InvoiceUpdate. Every field is optional; only
+// fields actually present are applied.
+export interface InvoiceUpdateInput {
+  date?: string;
+  client_name?: string;
+  client_address?: string;
+  vat_rate?: number;
+  note?: string;
+  items?: InvoiceItemInput[];
 }
 
 export interface Expense {

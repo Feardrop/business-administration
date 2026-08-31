@@ -13,7 +13,7 @@ from app import crud, schemas
 
 
 def _create_invoice(db_session):
-    return crud.create_invoice(
+    draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-02-01",
@@ -21,6 +21,7 @@ def _create_invoice(db_session):
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("250"))],
         ),
     )
+    return crud.issue_invoice(db_session, draft)
 
 
 def test_new_invoice_starts_open_with_no_paid_date(db_session):

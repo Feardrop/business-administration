@@ -7,6 +7,7 @@
     "yes": "Ja",
     "no": "Nein",
     "delete": "Löschen",
+    "edit": "Bearbeiten",
     "view": "Ansehen",
     "all": "Alle",
     "year": "Jahr",
@@ -68,14 +69,17 @@
     "emptyText": "Lege deine erste Rechnung an, sobald der erste Auftrag steht.",
     "resetToOpen": "Zurücksetzen",
     "statusPaid": "bezahlt",
-    "statusOpen": "offen"
+    "statusOpen": "offen",
+    "statusDraft": "Entwurf",
+    "numberPending": "–"
   },
   "invoiceForm": {
     "validationNeedsItem": "Bitte mindestens eine Position eintragen.",
     "saveError": "Fehler beim Speichern.",
     "title": "Neue Rechnung",
+    "titleEdit": "Entwurf bearbeiten",
     "numberLabel": "Rechnungsnummer",
-    "numberPlaceholder": "wird beim Speichern vergeben",
+    "numberPending": "wird bei Ausstellung vergeben",
     "dateLabel": "Rechnungsdatum",
     "clientNameLabel": "Kunde – Name / Firma",
     "clientNamePlaceholder": "z. B. Mustermann GmbH",
@@ -96,10 +100,12 @@
     "total": "Gesamtbetrag",
     "noteLabel": "Notiz (optional, erscheint nicht auf der Rechnung)",
     "notePlaceholder": "z. B. interner Hinweis",
-    "submit": "Rechnung erstellen"
+    "saveDraft": "Als Entwurf speichern",
+    "issue": "Rechnung ausstellen"
   },
   "invoiceDetail": {
     "notFound": "Rechnung nicht gefunden.",
+    "issue": "Ausstellen",
     "markOpen": "Als offen markieren",
     "print": "Drucken / als PDF speichern",
     "confirmDeleteText": "Diese Rechnung wirklich löschen?",

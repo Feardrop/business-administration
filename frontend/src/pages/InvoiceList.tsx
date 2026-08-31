@@ -1,17 +1,27 @@
 import { useTranslation } from "react-i18next";
 import { fmtDate, fmtEUR, invoiceTotals } from "../utils";
 import { IconPlus } from "../components/Icons";
-import type { Invoice } from "../types";
+import type { Invoice, Settings } from "../types";
 
 interface InvoiceListProps {
   invoices: Invoice[];
+  settings: Settings;
   onNew: () => void;
   onView: (id: number) => void;
+  onEdit: (id: number) => void;
   onMarkPaid: (id: number) => Promise<void>;
   onMarkOpen: (id: number) => Promise<void>;
 }
 
-export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMarkOpen }: InvoiceListProps) {
+export default function InvoiceList({
+  invoices,
+  settings,
+  onNew,
+  onView,
+  onEdit,
+  onMarkPaid,
+  onMarkOpen,
+}: InvoiceListProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const list = [...invoices].sort((a, b) => b.date.localeCompare(a.date));
@@ -48,29 +58,42 @@ export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMar
             </thead>
             <tbody>
               {list.map((inv) => {
-                const t2 = invoiceTotals(inv);
+                const t2 = invoiceTotals({
+                  ...inv,
+                  is_kleinunternehmer: inv.is_kleinunternehmer ?? settings.kleinunternehmer,
+                });
                 return (
                   <tr key={inv.id}>
                     <td className="mono" style={{ cursor: "pointer" }} onClick={() => onView(inv.id)}>
-                      {inv.number}
+                      {inv.number || t("invoiceList.numberPending")}
                     </td>
                     <td>{fmtDate(inv.date, lang)}</td>
                     <td>{inv.client_name}</td>
                     <td className="num">{fmtEUR(t2.gross, lang)}</td>
                     <td>
-                      {inv.status === "bezahlt" ? (
+                      {inv.status === "draft" && (
+                        <span className="badge badge-draft">{t("invoiceList.statusDraft")}</span>
+                      )}
+                      {inv.status === "bezahlt" && (
                         <span className="badge badge-paid">{t("invoiceList.statusPaid")}</span>
-                      ) : (
+                      )}
+                      {inv.status === "offen" && (
                         <span className="badge badge-open">{t("invoiceList.statusOpen")}</span>
                       )}
                     </td>
                     <td>
                       <div className="row-actions">
-                        {inv.status === "offen" ? (
+                        {inv.status === "draft" && (
+                          <button className="btn btn-sm" onClick={() => onEdit(inv.id)}>
+                            {t("common.edit")}
+                          </button>
+                        )}
+                        {inv.status === "offen" && (
                           <button className="btn btn-sm" onClick={() => onMarkPaid(inv.id)}>
                             {t("common.markPaid")}
                           </button>
-                        ) : (
+                        )}
+                        {inv.status === "bezahlt" && (
                           <button className="btn btn-sm btn-ghost" onClick={() => onMarkOpen(inv.id)}>
                             {t("invoiceList.resetToOpen")}
                           </button>

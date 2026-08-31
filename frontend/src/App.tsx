@@ -27,6 +27,9 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [tab, setTab] = useState<Tab>("dashboard");
   const [invoiceViewId, setInvoiceViewId] = useState<number | null>(null);
+  // Set while editing an existing draft via InvoiceForm; null for a
+  // brand-new invoice. Drafts are the only invoices ever routed here.
+  const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -58,11 +61,32 @@ export default function App() {
     setExpenses(await api.listExpenses());
   }
 
-  async function handleCreateInvoice(payload: InvoiceCreateInput) {
-    const created = await api.createInvoice(payload);
+  // Persists the form's contents as a draft: creates a new one, or PATCHes
+  // the draft being edited (editingInvoiceId set by goEditInvoice below).
+  async function handleSaveDraft(payload: InvoiceCreateInput) {
+    const saved = editingInvoiceId
+      ? await api.updateInvoiceDraft(editingInvoiceId, payload)
+      : await api.createInvoice(payload);
     await refreshInvoices();
-    setInvoiceViewId(created.id);
+    setInvoiceViewId(saved.id);
+    setEditingInvoiceId(null);
     setTab("invoiceDetail");
+  }
+  // Persists the form's contents (same as handleSaveDraft), then issues it
+  // in the same action — the one-way transition that burns the number.
+  async function handleIssueFromForm(payload: InvoiceCreateInput) {
+    const saved = editingInvoiceId
+      ? await api.updateInvoiceDraft(editingInvoiceId, payload)
+      : await api.createInvoice(payload);
+    await api.issueInvoice(saved.id);
+    await refreshInvoices();
+    setInvoiceViewId(saved.id);
+    setEditingInvoiceId(null);
+    setTab("invoiceDetail");
+  }
+  async function handleIssueInvoice(id: number) {
+    await api.issueInvoice(id);
+    await refreshInvoices();
   }
   async function handleMarkPaid(id: number) {
     await api.markInvoicePaid(id);
@@ -97,8 +121,17 @@ export default function App() {
   function goTab(next: Tab) {
     setTab(next);
   }
+  function goNewInvoice() {
+    setEditingInvoiceId(null);
+    setTab("invoiceNew");
+  }
+  function goEditInvoice(id: number) {
+    setEditingInvoiceId(id);
+    setTab("invoiceNew");
+  }
 
   const currentInvoice = invoices.find((i) => i.id === invoiceViewId) || null;
+  const editingInvoice = invoices.find((i) => i.id === editingInvoiceId) || null;
 
   return (
     <div className="shell">
@@ -112,18 +145,33 @@ export default function App() {
           {tab === "invoices" && (
             <InvoiceList
               invoices={invoices}
-              onNew={() => setTab("invoiceNew")}
+              settings={settings}
+              onNew={goNewInvoice}
               onView={(id) => {
                 setInvoiceViewId(id);
                 setTab("invoiceDetail");
               }}
+              onEdit={goEditInvoice}
               onMarkPaid={handleMarkPaid}
               onMarkOpen={handleMarkOpen}
             />
           )}
 
           {tab === "invoiceNew" && (
-            <InvoiceForm settings={settings} onCancel={() => setTab("invoices")} onSubmit={handleCreateInvoice} />
+            <InvoiceForm
+              settings={settings}
+              invoice={editingInvoice}
+              onCancel={() => {
+                if (editingInvoice) {
+                  setInvoiceViewId(editingInvoice.id);
+                  setTab("invoiceDetail");
+                } else {
+                  setTab("invoices");
+                }
+              }}
+              onSaveDraft={handleSaveDraft}
+              onIssue={handleIssueFromForm}
+            />
           )}
 
           {tab === "invoiceDetail" && (
@@ -131,6 +179,8 @@ export default function App() {
               invoice={currentInvoice}
               settings={settings}
               onBack={() => setTab("invoices")}
+              onEdit={goEditInvoice}
+              onIssue={handleIssueInvoice}
               onMarkPaid={handleMarkPaid}
               onMarkOpen={handleMarkOpen}
               onDelete={handleDeleteInvoice}

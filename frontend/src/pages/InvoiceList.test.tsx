@@ -5,7 +5,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import InvoiceList from "./InvoiceList";
-import type { Invoice } from "../types";
+import type { Invoice, Settings } from "../types";
 
 // jsdom's default navigator.language is "en-US"; force German so
 // assertions here don't depend on i18next-browser-languagedetector's
@@ -13,6 +13,17 @@ import type { Invoice } from "../types";
 beforeAll(async () => {
   await i18n.changeLanguage("de");
 });
+
+const settings: Settings = {
+  business_name: "Test Studio",
+  owner_name: "",
+  address: "",
+  tax_number: "DE123456789",
+  iban: "",
+  kleinunternehmer: true,
+  prev_year_revenue: "0",
+  invoice_prefix: "",
+};
 
 const invoices: Invoice[] = [
   {
@@ -26,6 +37,7 @@ const invoices: Invoice[] = [
     note: "",
     status: "offen",
     paid_date: null,
+    issued_at: "2026-01-15",
     created_at: "2026-01-15T10:00:00",
     items: [{ id: 1, description: "Shoot", qty: "1", price: "500" }],
   },
@@ -33,13 +45,31 @@ const invoices: Invoice[] = [
 
 describe("InvoiceList", () => {
   it("renders the empty state when there are no invoices", () => {
-    render(<InvoiceList invoices={[]} onNew={vi.fn()} onView={vi.fn()} onMarkPaid={vi.fn()} onMarkOpen={vi.fn()} />);
+    render(
+      <InvoiceList
+        invoices={[]}
+        settings={settings}
+        onNew={vi.fn()}
+        onView={vi.fn()}
+        onEdit={vi.fn()}
+        onMarkPaid={vi.fn()}
+        onMarkOpen={vi.fn()}
+      />
+    );
     expect(screen.getByText(/Noch keine Rechnungen/)).toBeInTheDocument();
   });
 
   it("renders a row per invoice with its number and client", () => {
     render(
-      <InvoiceList invoices={invoices} onNew={vi.fn()} onView={vi.fn()} onMarkPaid={vi.fn()} onMarkOpen={vi.fn()} />
+      <InvoiceList
+        invoices={invoices}
+        settings={settings}
+        onNew={vi.fn()}
+        onView={vi.fn()}
+        onEdit={vi.fn()}
+        onMarkPaid={vi.fn()}
+        onMarkOpen={vi.fn()}
+      />
     );
     expect(screen.getByText("2026-001")).toBeInTheDocument();
     expect(screen.getByText("Client A")).toBeInTheDocument();

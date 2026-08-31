@@ -8,6 +8,8 @@ interface InvoiceDetailProps {
   invoice: Invoice | null;
   settings: Settings;
   onBack: () => void;
+  onEdit: (id: number) => void;
+  onIssue: (id: number) => Promise<void>;
   onMarkPaid: (id: number) => Promise<void>;
   onMarkOpen: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -16,17 +18,23 @@ interface InvoiceDetailProps {
 // The printable invoice document below (.invoice-doc) intentionally stays in
 // German regardless of the app's UI language: it's the legal invoice text
 // sent to clients under German tax law (§19 UStG), not app chrome — it must
-// not follow the admin's language preference.
+// not follow the admin's language preference. The draft watermark added to
+// it below follows the same rule (fixed German, not run through t()) since
+// it's part of the same printable surface.
 export default function InvoiceDetail({
   invoice,
   settings,
   onBack,
+  onEdit,
+  onIssue,
   onMarkPaid,
   onMarkOpen,
   onDelete,
 }: InvoiceDetailProps) {
   const { t } = useTranslation();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   if (!invoice)
     return (
       <p>
@@ -36,8 +44,24 @@ export default function InvoiceDetail({
         </button>
       </p>
     );
-  const total = invoiceTotals(invoice);
+  const isDraft = invoice.status === "draft";
+  const total = invoiceTotals({
+    ...invoice,
+    is_kleinunternehmer: invoice.is_kleinunternehmer ?? settings.kleinunternehmer,
+  });
   const s = settings;
+
+  async function withErrorHandling(action: () => Promise<void>) {
+    setError("");
+    setBusy(true);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("invoiceForm.saveError"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
@@ -48,27 +72,51 @@ export default function InvoiceDetail({
           </button>
         </div>
         <div className="actions">
-          {invoice.status === "offen" ? (
+          {isDraft && (
+            <>
+              <button className="btn btn-sm" onClick={() => onEdit(invoice.id)} disabled={busy}>
+                {t("common.edit")}
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => withErrorHandling(() => onIssue(invoice.id))}
+                disabled={busy}
+              >
+                {t("invoiceDetail.issue")}
+              </button>
+            </>
+          )}
+          {invoice.status === "offen" && (
             <button className="btn btn-sm" onClick={() => onMarkPaid(invoice.id)}>
               {t("common.markPaid")}
             </button>
-          ) : (
+          )}
+          {invoice.status === "bezahlt" && (
             <button className="btn btn-sm btn-ghost" onClick={() => onMarkOpen(invoice.id)}>
               {t("invoiceDetail.markOpen")}
             </button>
           )}
-          <button className="btn btn-sm" onClick={() => window.print()}>
-            <IconPrint /> {t("invoiceDetail.print")}
-          </button>
-          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)}>
-            <IconTrash /> {t("common.delete")}
-          </button>
+          {!isDraft && (
+            <button className="btn btn-sm" onClick={() => window.print()}>
+              <IconPrint /> {t("invoiceDetail.print")}
+            </button>
+          )}
+          {isDraft && (
+            <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)}>
+              <IconTrash /> {t("common.delete")}
+            </button>
+          )}
         </div>
       </div>
+      {error && <div className="banner banner-amber no-print">{error}</div>}
       {confirmDelete && (
         <div className="banner banner-amber no-print">
           {t("invoiceDetail.confirmDeleteText")}
-          <button className="btn btn-sm btn-danger" style={{ marginLeft: 8 }} onClick={() => onDelete(invoice.id)}>
+          <button
+            className="btn btn-sm btn-danger"
+            style={{ marginLeft: 8 }}
+            onClick={() => withErrorHandling(() => onDelete(invoice.id))}
+          >
             {t("invoiceDetail.confirmDeleteYes")}
           </button>
           <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDelete(false)}>
@@ -78,6 +126,11 @@ export default function InvoiceDetail({
       )}
 
       <div className="invoice-doc">
+        {isDraft && (
+          <div className="banner banner-amber no-print" style={{ marginBottom: 16 }}>
+            ENTWURF – noch keine gültige Rechnung, keine Rechnungsnummer vergeben.
+          </div>
+        )}
         <div className="invoice-doc-head">
           <div className="from">
             {s.business_name}
@@ -87,7 +140,7 @@ export default function InvoiceDetail({
           </div>
           <div className="meta">
             <div>Rechnungsnummer</div>
-            <div className="num">{invoice.number}</div>
+            <div className="num">{invoice.number || "–"}</div>
             <div style={{ marginTop: 8 }}>Rechnungsdatum</div>
             <div>{fmtDate(invoice.date, "de")}</div>
           </div>
@@ -122,7 +175,7 @@ export default function InvoiceDetail({
             <span>Nettobetrag</span>
             <span className="mono">{fmtEUR(total.net, "de")}</span>
           </div>
-          {!invoice.is_kleinunternehmer && (
+          {!(invoice.is_kleinunternehmer ?? settings.kleinunternehmer) && (
             <div className="line">
               <span>zzgl. {invoice.vat_rate}% USt</span>
               <span className="mono">{fmtEUR(total.vat, "de")}</span>
@@ -134,7 +187,8 @@ export default function InvoiceDetail({
           </div>
         </div>
         <div className="footnote">
-          {invoice.is_kleinunternehmer && "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."}
+          {(invoice.is_kleinunternehmer ?? settings.kleinunternehmer) &&
+            "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."}
           {s.iban && (
             <>
               <br />
