@@ -6,72 +6,63 @@ import { describe, expect, it } from "vitest";
 import { fmtDate, fmtEUR, invoiceTotals, isoYear } from "./utils";
 
 describe("invoiceTotals", () => {
-  it("computes net/vat/gross for a 19% VAT-registered invoice", () => {
+  // Issue #33: vat_rate moved from the invoice onto each line item, and
+  // invoiceTotals now groups subtotals per distinct rate present.
+
+  it("computes net/vat/gross for a single-rate VAT-registered invoice (unchanged from before)", () => {
     const totals = invoiceTotals({
       is_kleinunternehmer: false,
-      vat_rate: 19,
-      items: [{ qty: 2, price: 100 }],
+      items: [{ qty: 2, price: 100, vat_rate: 19 }],
     });
     expect(totals.net).toBe(200);
     expect(totals.vat).toBeCloseTo(38);
     expect(totals.gross).toBeCloseTo(238);
+    expect(totals.breakdown).toEqual([{ vat_rate: 19, net: 200, vat: 38 }]);
   });
 
-  it("computes net/vat/gross for a 7% VAT-registered invoice", () => {
+  it("groups subtotals per rate for a mixed 19%/7% invoice", () => {
     const totals = invoiceTotals({
       is_kleinunternehmer: false,
-      vat_rate: 7,
-      items: [{ qty: 3, price: 100 }],
-    });
-    expect(totals.net).toBe(300);
-    expect(totals.vat).toBeCloseTo(21);
-    expect(totals.gross).toBeCloseTo(321);
-  });
-
-  it("charges no VAT for a VAT-registered invoice using the 0% rate", () => {
-    const totals = invoiceTotals({
-      is_kleinunternehmer: false,
-      vat_rate: 0,
-      items: [{ qty: 4, price: 25 }],
-    });
-    expect(totals.net).toBe(100);
-    expect(totals.vat).toBe(0);
-    expect(totals.gross).toBe(100);
-  });
-
-  it("charges no VAT for a Kleinunternehmer invoice", () => {
-    const totals = invoiceTotals({
-      is_kleinunternehmer: true,
-      vat_rate: 19,
-      items: [{ qty: 1, price: 50 }],
-    });
-    expect(totals.vat).toBe(0);
-    expect(totals.gross).toBe(50);
-  });
-
-  it("ignores vat_rate entirely for a Kleinunternehmer invoice, regardless of its value", () => {
-    for (const vat_rate of [7, 0]) {
-      const totals = invoiceTotals({ is_kleinunternehmer: true, vat_rate, items: [{ qty: 1, price: 50 }] });
-      expect(totals.vat).toBe(0);
-      expect(totals.gross).toBe(50);
-    }
-  });
-
-  it("sums multiple line items before applying VAT", () => {
-    const totals = invoiceTotals({
-      is_kleinunternehmer: false,
-      vat_rate: 19,
       items: [
-        { qty: 1, price: 100 },
-        { qty: 2, price: 50 },
+        { qty: 1, price: 100, vat_rate: 19 },
+        { qty: 1, price: 50, vat_rate: 7 },
       ],
     });
-    expect(totals.net).toBe(200);
-    expect(totals.vat).toBeCloseTo(38);
+    expect(totals.net).toBe(150);
+    expect(totals.breakdown).toHaveLength(2);
+    const byRate = Object.fromEntries(totals.breakdown.map((b) => [b.vat_rate, b]));
+    expect(byRate[19]).toEqual({ vat_rate: 19, net: 100, vat: 19 });
+    expect(byRate[7]).toEqual({ vat_rate: 7, net: 50, vat: 3.5 });
+    expect(totals.vat).toBeCloseTo(22.5);
+    expect(totals.gross).toBeCloseTo(172.5);
+  });
+
+  it("sums two lines sharing the same rate into a single breakdown entry", () => {
+    const totals = invoiceTotals({
+      is_kleinunternehmer: false,
+      items: [
+        { qty: 1, price: 100, vat_rate: 19 },
+        { qty: 1, price: 20, vat_rate: 19 },
+      ],
+    });
+    expect(totals.breakdown).toEqual([{ vat_rate: 19, net: 120, vat: 22.8 }]);
+  });
+
+  it("charges no VAT and has no breakdown for a Kleinunternehmer invoice, regardless of per-line rates", () => {
+    const totals = invoiceTotals({
+      is_kleinunternehmer: true,
+      items: [
+        { qty: 1, price: 50, vat_rate: 19 },
+        { qty: 1, price: 30, vat_rate: 7 },
+      ],
+    });
+    expect(totals.vat).toBe(0);
+    expect(totals.gross).toBe(80);
+    expect(totals.breakdown).toEqual([]);
   });
 
   it("treats a missing items array as zero total", () => {
-    const totals = invoiceTotals({ is_kleinunternehmer: false, vat_rate: 19 });
+    const totals = invoiceTotals({ is_kleinunternehmer: false });
     expect(totals.net).toBe(0);
     expect(totals.vat).toBe(0);
     expect(totals.gross).toBe(0);
