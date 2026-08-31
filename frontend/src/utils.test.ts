@@ -3,7 +3,7 @@
 // suite"). Fast tests live in `*.test.ts(x)`; slow ones in `*.slow.test.tsx`
 // (see package.json's `test`/`test:slow` scripts).
 import { describe, expect, it } from "vitest";
-import { fmtDate, fmtEUR, invoiceTotals, isoYear } from "./utils";
+import { computeInvoiceStats, fmtDate, fmtEUR, invoiceTotals, isoYear } from "./utils";
 
 describe("invoiceTotals", () => {
   // Issue #33: vat_rate moved from the invoice onto each line item, and
@@ -75,6 +75,78 @@ describe("invoiceTotals", () => {
 // the assertion doesn't depend on which one the current environment picks.
 const NON_ASCII_SPACES = new RegExp("[  ]", "g");
 const normalizeSpaces = (s: string): string => s.replace(NON_ASCII_SPACES, " ");
+
+describe("computeInvoiceStats", () => {
+  // Issue #26: a "storniert" (cancelled) invoice must never contribute to
+  // revenue, VAT, or open-balance figures on the Dashboard -- deleting an
+  // issued invoice isn't allowed under §14c UStG, so cancellation is the
+  // only way an issued invoice's amount stops counting, and the dashboard
+  // must actually honor that everywhere it aggregates by status.
+
+  it("counts a paid invoice's net/vat/gross normally", () => {
+    const stats = computeInvoiceStats(
+      [
+        {
+          status: "bezahlt",
+          paid_date: "2026-03-01",
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 100, vat_rate: 19 }],
+        },
+      ],
+      2026
+    );
+    expect(stats.income).toBe(100);
+    expect(stats.vatCollected).toBeCloseTo(19);
+    expect(stats.revenueThisYearGross).toBeCloseTo(119);
+    expect(stats.paidThisYearCount).toBe(1);
+  });
+
+  it("excludes a cancelled invoice from income/VAT/revenue even though its stale paid_date would otherwise match", () => {
+    const stats = computeInvoiceStats(
+      [
+        {
+          status: "storniert",
+          paid_date: "2026-03-01",
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 100, vat_rate: 19 }],
+        },
+      ],
+      2026
+    );
+    expect(stats.income).toBe(0);
+    expect(stats.vatCollected).toBe(0);
+    expect(stats.revenueThisYearGross).toBe(0);
+    expect(stats.paidThisYearCount).toBe(0);
+  });
+
+  it("excludes a cancelled invoice from the open balance", () => {
+    const stats = computeInvoiceStats(
+      [
+        {
+          status: "storniert",
+          paid_date: null,
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 100, vat_rate: 19 }],
+        },
+      ],
+      2026
+    );
+    expect(stats.openSum).toBe(0);
+    expect(stats.openInvoicesCount).toBe(0);
+  });
+
+  it("still counts an unrelated open invoice alongside an excluded cancelled one", () => {
+    const stats = computeInvoiceStats(
+      [
+        { status: "storniert", paid_date: null, is_kleinunternehmer: false, items: [{ qty: 1, price: 999, vat_rate: 19 }] },
+        { status: "offen", paid_date: null, is_kleinunternehmer: false, items: [{ qty: 1, price: 50, vat_rate: 19 }] },
+      ],
+      2026
+    );
+    expect(stats.openInvoicesCount).toBe(1);
+    expect(stats.openSum).toBeCloseTo(59.5);
+  });
+});
 
 describe("fmtEUR", () => {
   it("formats with German locale conventions by default", () => {
