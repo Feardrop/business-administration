@@ -15,7 +15,11 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
   const y = currentYear();
   // Every revenue/VAT/open-balance/threshold figure below goes through
   // this one function, which excludes "storniert" (cancelled) invoices up
-  // front (issue #26) — see utils.ts's computeInvoiceStats.
+  // front (issue #26) — see utils.ts's computeInvoiceStats. Issue #30:
+  // income/VAT/revenue are now attributed by each payment's own year
+  // (Zufluss-Prinzip), not by invoice status/date, and "open" is the
+  // remaining balance due for a "teilweise bezahlt" invoice, not its full
+  // gross.
   const stats = computeInvoiceStats(invoices, y);
   const expensesThisYear = expenses.filter((e) => isoYear(e.date) === y);
 

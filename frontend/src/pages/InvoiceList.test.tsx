@@ -38,45 +38,28 @@ const invoices: Invoice[] = [
     is_kleinunternehmer: true,
     note: "",
     status: "offen",
-    paid_date: null,
     issued_at: "2026-01-15",
     created_at: "2026-01-15T10:00:00",
     cancelled_at: null,
     cancel_reason: null,
     cancels_invoice_id: null,
     cancellation_invoice_id: null,
+    payments: [],
+    amount_paid: "0",
+    amount_due: "500",
+    overpaid: false,
     items: [{ id: 1, description: "Shoot", qty: "1", price: "500", vat_rate: "0" }],
   },
 ];
 
 describe("InvoiceList", () => {
   it("renders the empty state when there are no invoices", () => {
-    render(
-      <InvoiceList
-        invoices={[]}
-        settings={settings}
-        onNew={vi.fn()}
-        onView={vi.fn()}
-        onEdit={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
-      />
-    );
+    render(<InvoiceList invoices={[]} settings={settings} onNew={vi.fn()} onView={vi.fn()} onEdit={vi.fn()} />);
     expect(screen.getByText(/Noch keine Rechnungen/)).toBeInTheDocument();
   });
 
   it("renders a row per invoice with its number and client", () => {
-    render(
-      <InvoiceList
-        invoices={invoices}
-        settings={settings}
-        onNew={vi.fn()}
-        onView={vi.fn()}
-        onEdit={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
-      />
-    );
+    render(<InvoiceList invoices={invoices} settings={settings} onNew={vi.fn()} onView={vi.fn()} onEdit={vi.fn()} />);
     expect(screen.getByText("2026-001")).toBeInTheDocument();
     expect(screen.getByText("Client A")).toBeInTheDocument();
   });

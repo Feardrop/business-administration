@@ -15,6 +15,7 @@ import type {
   ExpenseUpdateInput,
   Invoice,
   InvoiceCreateInput,
+  PaymentCreateInput,
   Settings,
   Tab,
 } from "./types";
@@ -88,12 +89,14 @@ export default function App() {
     await api.issueInvoice(id);
     await refreshInvoices();
   }
-  async function handleMarkPaid(id: number) {
-    await api.markInvoicePaid(id);
+  // A boolean paid/open toggle doesn't fit a many-payments ledger (issue
+  // #30) -- these replace the old handleMarkPaid/handleMarkOpen.
+  async function handleRecordPayment(id: number, payload: PaymentCreateInput) {
+    await api.recordPayment(id, payload);
     await refreshInvoices();
   }
-  async function handleMarkOpen(id: number) {
-    await api.markInvoiceOpen(id);
+  async function handleDeletePayment(invoiceId: number, paymentId: number) {
+    await api.deletePayment(invoiceId, paymentId);
     await refreshInvoices();
   }
   async function handleDeleteInvoice(id: number) {
@@ -166,8 +169,6 @@ export default function App() {
                 setTab("invoiceDetail");
               }}
               onEdit={goEditInvoice}
-              onMarkPaid={handleMarkPaid}
-              onMarkOpen={handleMarkOpen}
             />
           )}
 
@@ -196,8 +197,8 @@ export default function App() {
               onBack={() => setTab("invoices")}
               onEdit={goEditInvoice}
               onIssue={handleIssueInvoice}
-              onMarkPaid={handleMarkPaid}
-              onMarkOpen={handleMarkOpen}
+              onRecordPayment={handleRecordPayment}
+              onDeletePayment={handleDeletePayment}
               onDelete={handleDeleteInvoice}
               onCancel={handleCancelInvoice}
               onCancelAndCorrect={handleCancelAndCorrectInvoice}

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { fmtDate, fmtEUR, invoiceTotals } from "../utils";
+import { amountDue, amountPaid, fmtDate, fmtEUR, invoiceTotals, PAYMENT_METHODS, todayISO } from "../utils";
 import { IconBack, IconPrint, IconTrash } from "../components/Icons";
-import type { Invoice, Settings } from "../types";
+import type { Invoice, PaymentCreateInput, Settings } from "../types";
 
 interface InvoiceDetailProps {
   invoice: Invoice | null;
@@ -14,8 +14,8 @@ interface InvoiceDetailProps {
   onBack: () => void;
   onEdit: (id: number) => void;
   onIssue: (id: number) => Promise<void>;
-  onMarkPaid: (id: number) => Promise<void>;
-  onMarkOpen: (id: number) => Promise<void>;
+  onRecordPayment: (id: number, data: PaymentCreateInput) => Promise<void>;
+  onDeletePayment: (invoiceId: number, paymentId: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onCancelAndCorrect: (id: number, reason: string) => Promise<void>;
@@ -35,8 +35,8 @@ export default function InvoiceDetail({
   onBack,
   onEdit,
   onIssue,
-  onMarkPaid,
-  onMarkOpen,
+  onRecordPayment,
+  onDeletePayment,
   onDelete,
   onCancel,
   onCancelAndCorrect,
@@ -52,6 +52,10 @@ export default function InvoiceDetail({
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(todayISO());
+  const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS[0]);
+  const [paymentNote, setPaymentNote] = useState("");
   if (!invoice)
     return (
       <p>
@@ -64,18 +68,27 @@ export default function InvoiceDetail({
   const isDraft = invoice.status === "draft";
   // Only an already-issued, not-yet-cancelled invoice can be cancelled
   // (issue #26) -- a draft is just deleted, and "storniert" is terminal.
-  const isCancellable = invoice.status === "offen" || invoice.status === "bezahlt";
+  // "teilweise bezahlt" (issue #30) is cancellable too -- a partial
+  // payment doesn't change that §14c UStG still requires a formal
+  // counter-document to reverse the invoice.
+  const isCancellable =
+    invoice.status === "offen" || invoice.status === "teilweise bezahlt" || invoice.status === "bezahlt";
   const cancellationInvoice = invoice.cancellation_invoice_id
     ? invoices.find((i) => i.id === invoice.cancellation_invoice_id) || null
     : null;
   const cancelledInvoice = invoice.cancels_invoice_id
     ? invoices.find((i) => i.id === invoice.cancels_invoice_id) || null
     : null;
-  const total = invoiceTotals({
-    ...invoice,
-    is_kleinunternehmer: invoice.is_kleinunternehmer ?? settings.kleinunternehmer,
-  });
+  const invForTotals = { ...invoice, is_kleinunternehmer: invoice.is_kleinunternehmer ?? settings.kleinunternehmer };
+  const total = invoiceTotals(invForTotals);
   const s = settings;
+  // Payments can only be recorded against an already-issued, not-yet-
+  // cancelled invoice (issue #30) -- "bezahlt" stays payable too, for a
+  // correction or an intentional (flagged, never rejected) overpayment.
+  const isPayable =
+    invoice.status === "offen" || invoice.status === "teilweise bezahlt" || invoice.status === "bezahlt";
+  const paid = amountPaid(invForTotals);
+  const due = amountDue(invForTotals);
 
   function startCancel(mode: "cancel" | "cancelAndCorrect") {
     setCancelMode(mode);
@@ -108,6 +121,27 @@ export default function InvoiceDetail({
     }
   }
 
+  async function submitPayment(e: FormEvent) {
+    e.preventDefault();
+    if (!invoice) return;
+    await withErrorHandling(async () => {
+      await onRecordPayment(invoice.id, {
+        amount: paymentAmount,
+        date: paymentDate || undefined,
+        method: paymentMethod,
+        note: paymentNote || undefined,
+      });
+      setPaymentAmount("");
+      setPaymentDate(todayISO());
+      setPaymentNote("");
+    });
+  }
+
+  async function removePayment(paymentId: number) {
+    if (!invoice) return;
+    await withErrorHandling(() => onDeletePayment(invoice.id, paymentId));
+  }
+
   return (
     <>
       <div className="page-head no-print">
@@ -130,16 +164,6 @@ export default function InvoiceDetail({
                 {t("invoiceDetail.issue")}
               </button>
             </>
-          )}
-          {invoice.status === "offen" && (
-            <button className="btn btn-sm" onClick={() => onMarkPaid(invoice.id)}>
-              {t("common.markPaid")}
-            </button>
-          )}
-          {invoice.status === "bezahlt" && (
-            <button className="btn btn-sm btn-ghost" onClick={() => onMarkOpen(invoice.id)}>
-              {t("invoiceDetail.markOpen")}
-            </button>
           )}
           {!isDraft && (
             <button className="btn btn-sm" onClick={() => window.print()}>
@@ -230,6 +254,120 @@ export default function InvoiceDetail({
           <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDelete(false)}>
             {t("common.cancel")}
           </button>
+        </div>
+      )}
+
+      {/* The payment ledger (issue #30) -- replaces the old single
+          "mark paid"/"mark open" toggle. Only shown for an issued
+          invoice; a draft can't have payments yet. */}
+      {!isDraft && (
+        <div className="card no-print" style={{ marginBottom: 16 }}>
+          <div className="stat-label" style={{ marginBottom: 12 }}>
+            {t("invoiceDetail.paymentsTitle")}
+          </div>
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div className="stat-sub">{t("invoiceDetail.amountPaidLabel")}</div>
+              <div className="stat-value" style={{ fontSize: 20 }}>
+                {fmtEUR(paid, lang)}
+              </div>
+            </div>
+            <div>
+              <div className="stat-sub">{t("invoiceDetail.amountDueLabel")}</div>
+              <div className="stat-value" style={{ fontSize: 20 }}>
+                {fmtEUR(due, lang)}
+              </div>
+            </div>
+          </div>
+          {invoice.overpaid && (
+            <div className="banner banner-amber" style={{ marginBottom: 12 }}>
+              {t("invoiceDetail.overpaidWarning")}
+            </div>
+          )}
+          {invoice.payments.length > 0 ? (
+            <table style={{ marginBottom: isPayable ? 16 : 0 }}>
+              <thead>
+                <tr>
+                  <th>{t("fields.date")}</th>
+                  <th className="num">{t("fields.amount")}</th>
+                  <th>{t("invoiceDetail.paymentMethodLabel")}</th>
+                  <th>{t("fields.description")}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.payments.map((p) => (
+                  <tr key={p.id}>
+                    <td>{fmtDate(p.date, lang)}</td>
+                    <td className="num">{fmtEUR(p.amount, lang)}</td>
+                    <td>{t(`invoiceDetail.paymentMethods.${p.method}`, p.method || "–")}</td>
+                    <td>{p.note || "–"}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => removePayment(p.id)}
+                        disabled={busy}
+                        title={t("invoiceDetail.deletePayment")}
+                      >
+                        <IconTrash />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="stat-sub">{t("invoiceDetail.noPayments")}</p>
+          )}
+          {isPayable && (
+            <form
+              onSubmit={submitPayment}
+              style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}
+            >
+              <div>
+                <label>{t("fields.amount")}</label>
+                <br />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  style={{ width: 110 }}
+                />
+              </div>
+              <div>
+                <label>{t("fields.date")}</label>
+                <br />
+                <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              </div>
+              <div>
+                <label>{t("invoiceDetail.paymentMethodLabel")}</label>
+                <br />
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {t(`invoiceDetail.paymentMethods.${m}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <label>{t("fields.description")}</label>
+                <br />
+                <input
+                  type="text"
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <button className="btn btn-sm btn-primary" type="submit" disabled={busy || !paymentAmount}>
+                {t("invoiceDetail.recordPayment")}
+              </button>
+            </form>
+          )}
         </div>
       )}
 

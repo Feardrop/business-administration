@@ -37,7 +37,7 @@ export interface InvoiceItemInput {
   vat_rate?: number | string;
 }
 
-// Full target status lifecycle (see backend/app/schemas.py's InvoiceStatus
+// Full status lifecycle (see backend/app/schemas.py's InvoiceStatus
 // comment / backend/app/models.py's Invoice docstring for the diagram):
 //   draft --issue--> offen --pay--> bezahlt
 //     |                 |
@@ -45,12 +45,37 @@ export interface InvoiceItemInput {
 //     offen --partial payment--> teilweise bezahlt --(pay rest)--> bezahlt
 //                                                                  (#30)
 //     teilweise bezahlt --cancel--> storniert                     (#26)
-// "draft" | "offen" | "bezahlt" | "storniert" are produced by this app
-// today. "teilweise bezahlt" is listed so the type doesn't need another
-// breaking change once #30 lands. "storniert" is terminal — reached only
-// via POST .../cancel[-and-correct], never by deleting or editing an
-// issued invoice (§14c UStG).
+// All five are produced by this app now that #26 and #30 have both
+// landed. "offen"/"teilweise bezahlt"/"bezahlt" are derived server-side
+// from the payment ledger (see Payment below) -- never set directly.
+// "storniert" is terminal -- reached only via POST .../cancel[-and-correct],
+// never by deleting or editing an issued invoice (§14c UStG), and never
+// re-derived from payment state.
 export type InvoiceStatus = "draft" | "offen" | "teilweise bezahlt" | "bezahlt" | "storniert";
+
+// One entry in an invoice's payment ledger -- mirrors
+// backend/app/schemas.py's PaymentOut. Replaces the old boolean
+// Invoice.paid_date: `date` is the actual fix for the cash-basis
+// tax-year attribution bug (Zufluss-Prinzip), since it defaults to today
+// but is always user-overridable.
+export interface Payment {
+  id: number;
+  invoice_id: number;
+  date: string;
+  amount: string;
+  method: string;
+  note: string | null;
+}
+
+// Payload for POST /api/invoices/{id}/payments -- mirrors
+// backend/app/schemas.py's PaymentIn. `date` is optional; omitting it
+// lets the backend default to today (still overridable by passing it).
+export interface PaymentCreateInput {
+  date?: string;
+  amount: number | string;
+  method?: string;
+  note?: string;
+}
 
 export interface Invoice {
   id: number;
@@ -72,7 +97,6 @@ export interface Invoice {
   is_kleinunternehmer: boolean | null;
   note: string;
   status: InvoiceStatus;
-  paid_date: string | null;
   issued_at: string | null;
   created_at: string;
   // Set together with status "storniert" (issue #26). Null on an invoice
@@ -86,6 +110,16 @@ export interface Invoice {
   // invoice exists. Null otherwise, including on a cancellation invoice.
   cancellation_invoice_id: number | null;
   items: InvoiceItem[];
+  // The payment ledger (issue #30), replacing the old boolean paid_date.
+  // amount_paid/amount_due/overpaid are computed server-side, mirroring
+  // models.Invoice's Python properties of the same name -- prefer
+  // utils.ts's amountPaid()/amountDue() client-side when computing from
+  // an invoice you're about to mutate locally (e.g. right after posting a
+  // payment), since these only refresh on the next fetch.
+  payments: Payment[];
+  amount_paid: string;
+  amount_due: string;
+  overpaid: boolean;
 }
 
 // Response of POST /api/invoices/{id}/cancel-and-correct: the new

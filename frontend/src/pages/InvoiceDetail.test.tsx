@@ -37,13 +37,16 @@ const invoice: Invoice = {
   is_kleinunternehmer: false,
   note: "",
   status: "offen",
-  paid_date: null,
   issued_at: "2026-01-15",
   created_at: "2026-01-15T10:00:00",
   cancelled_at: null,
   cancel_reason: null,
   cancels_invoice_id: null,
   cancellation_invoice_id: null,
+  payments: [],
+  amount_paid: "0",
+  amount_due: "595",
+  overpaid: false,
   items: [{ id: 1, description: "Shoot", qty: "1", price: "500", vat_rate: "19" }],
 };
 
@@ -57,8 +60,8 @@ describe("InvoiceDetail", () => {
         onBack={vi.fn()}
         onEdit={vi.fn()}
         onIssue={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
+        onRecordPayment={vi.fn()}
+        onDeletePayment={vi.fn()}
         onDelete={vi.fn()}
         onCancel={vi.fn()}
         onCancelAndCorrect={vi.fn()}
@@ -77,8 +80,8 @@ describe("InvoiceDetail", () => {
         onBack={vi.fn()}
         onEdit={vi.fn()}
         onIssue={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
+        onRecordPayment={vi.fn()}
+        onDeletePayment={vi.fn()}
         onDelete={vi.fn()}
         onCancel={vi.fn()}
         onCancelAndCorrect={vi.fn()}

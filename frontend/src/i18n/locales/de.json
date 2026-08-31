@@ -10,8 +10,7 @@
     "edit": "Bearbeiten",
     "view": "Ansehen",
     "all": "Alle",
-    "year": "Jahr",
-    "markPaid": "Als bezahlt markieren"
+    "year": "Jahr"
   },
   "fields": {
     "number": "Nr.",
@@ -43,16 +42,16 @@
     "subtitle": "Zahlen auf Zufluss-Basis – bezahlte Rechnungen und erfasste Ausgaben.",
     "incomeNet": "Einnahmen (netto)",
     "vatNote": "zzgl. {{amount}} USt, ans Finanzamt abzuführen",
-    "paidInvoicesCount_one": "{{count}} bezahlte Rechnung",
-    "paidInvoicesCount_other": "{{count}} bezahlte Rechnungen",
+    "paidInvoicesCount_one": "{{count}} Rechnung mit Zahlungseingang",
+    "paidInvoicesCount_other": "{{count}} Rechnungen mit Zahlungseingang",
     "expensesLabel": "Ausgaben",
     "expenseItemsCount_one": "{{count}} Position",
     "expenseItemsCount_other": "{{count}} Positionen",
     "profit": "Gewinn (EÜR-Vorschau)",
     "profitNote": "Grundfreibetrag ggf. beachten",
     "openInvoices": "Offene Rechnungen",
-    "openInvoicesNote_one": "{{count}} noch nicht als bezahlt markiert – ",
-    "openInvoicesNote_other": "{{count}} noch nicht als bezahlt markiert – ",
+    "openInvoicesNote_one": "{{count}} noch nicht vollständig bezahlt – ",
+    "openInvoicesNote_other": "{{count}} noch nicht vollständig bezahlt – ",
     "openInvoicesLink": "ansehen",
     "limitsTitle": "Kleinunternehmer-Grenzen (§19 UStG)",
     "prevYearGaugeLabel": "Vorjahresumsatz (manuell in Einstellungen) — Grenze {{limit}}",
@@ -67,12 +66,14 @@
     "newInvoice": "Neue Rechnung",
     "emptyTitle": "Noch keine Rechnungen",
     "emptyText": "Lege deine erste Rechnung an, sobald der erste Auftrag steht.",
-    "resetToOpen": "Zurücksetzen",
     "statusPaid": "bezahlt",
+    "statusOverpaid": "überzahlt",
     "statusOpen": "offen",
+    "statusPartial": "teilweise bezahlt",
     "statusDraft": "Entwurf",
     "statusCancelled": "storniert",
-    "numberPending": "–"
+    "numberPending": "–",
+    "remainingDue": "noch {{amount}} offen"
   },
   "invoiceForm": {
     "validationNeedsItem": "Bitte mindestens eine Position eintragen.",
@@ -112,7 +113,6 @@
   "invoiceDetail": {
     "notFound": "Rechnung nicht gefunden.",
     "issue": "Ausstellen",
-    "markOpen": "Als offen markieren",
     "print": "Drucken / als PDF speichern",
     "confirmDeleteText": "Diese Rechnung wirklich löschen?",
     "confirmDeleteYes": "Ja, löschen",
@@ -125,7 +125,21 @@
     "cancelledBanner": "Diese Rechnung wurde am {{date}} storniert.",
     "cancelReasonLabel": "Stornogrund",
     "viewCancellationInvoice": "Stornorechnung {{number}} ansehen",
-    "cancelsInvoiceNote": "Diese Stornorechnung storniert Rechnung {{number}}."
+    "cancelsInvoiceNote": "Diese Stornorechnung storniert Rechnung {{number}}.",
+    "paymentsTitle": "Zahlungen",
+    "amountPaidLabel": "Bezahlt",
+    "amountDueLabel": "Offen",
+    "overpaidWarning": "Diese Rechnung wurde überzahlt – die erfassten Zahlungen übersteigen den Rechnungsbetrag.",
+    "paymentMethodLabel": "Zahlungsart",
+    "paymentMethods": {
+      "bank_transfer": "Überweisung",
+      "cash": "Bar",
+      "paypal": "PayPal",
+      "other": "Sonstiges"
+    },
+    "noPayments": "Noch keine Zahlung erfasst.",
+    "recordPayment": "Zahlung erfassen",
+    "deletePayment": "Zahlung entfernen"
   },
   "expenses": {
     "title": "Ausgaben",

@@ -6,6 +6,7 @@ import type {
   Invoice,
   InvoiceCreateInput,
   InvoiceUpdateInput,
+  PaymentCreateInput,
   Settings,
 } from "./types";
 
@@ -67,9 +68,17 @@ export const api = {
   updateInvoiceDraft: (id: number, data: InvoiceUpdateInput) =>
     request<Invoice>(`/invoices/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   issueInvoice: (id: number) => request<Invoice>(`/invoices/${id}/issue`, { method: "POST" }),
-  markInvoicePaid: (id: number) => request<Invoice>(`/invoices/${id}/mark-paid`, { method: "POST" }),
-  markInvoiceOpen: (id: number) => request<Invoice>(`/invoices/${id}/mark-open`, { method: "POST" }),
   deleteInvoice: (id: number) => request<null>(`/invoices/${id}`, { method: "DELETE" }),
+  // A boolean paid/open toggle doesn't fit a many-payments ledger (issue
+  // #30) -- these replace the old markInvoicePaid/markInvoiceOpen with a
+  // real payment history. recordPayment returns the updated invoice
+  // (new payment + recomputed status) in one round trip; deletePayment
+  // returns nothing, so callers refetch the invoice list same as any
+  // other delete.
+  recordPayment: (invoiceId: number, data: PaymentCreateInput) =>
+    request<Invoice>(`/invoices/${invoiceId}/payments`, { method: "POST", body: JSON.stringify(data) }),
+  deletePayment: (invoiceId: number, paymentId: number) =>
+    request<null>(`/invoices/${invoiceId}/payments/${paymentId}`, { method: "DELETE" }),
   // §14c UStG: an issued invoice can't be deleted or silently corrected --
   // it's reversed with a formal, separately-numbered cancellation invoice
   // (Stornorechnung) instead. See issue #26.

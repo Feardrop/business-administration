@@ -394,6 +394,11 @@ th.num {
   background: var(--danger-soft);
   color: var(--danger);
 }
+.badge-partial {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border: 1px dashed var(--amber);
+}
 
 .empty {
   padding: 30px 10px;

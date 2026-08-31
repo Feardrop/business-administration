@@ -10,8 +10,7 @@
     "edit": "Edit",
     "view": "View",
     "all": "All",
-    "year": "Year",
-    "markPaid": "Mark as paid"
+    "year": "Year"
   },
   "fields": {
     "number": "No.",
@@ -43,16 +42,16 @@
     "subtitle": "Cash-basis figures – paid invoices and recorded expenses.",
     "incomeNet": "Income (net)",
     "vatNote": "plus {{amount}} VAT, owed to the tax office",
-    "paidInvoicesCount_one": "{{count}} paid invoice",
-    "paidInvoicesCount_other": "{{count}} paid invoices",
+    "paidInvoicesCount_one": "{{count}} invoice with a payment received",
+    "paidInvoicesCount_other": "{{count}} invoices with a payment received",
     "expensesLabel": "Expenses",
     "expenseItemsCount_one": "{{count}} item",
     "expenseItemsCount_other": "{{count}} items",
     "profit": "Profit (EÜR preview)",
     "profitNote": "Mind the basic tax-free allowance where applicable",
     "openInvoices": "Open invoices",
-    "openInvoicesNote_one": "{{count}} not yet marked as paid – ",
-    "openInvoicesNote_other": "{{count}} not yet marked as paid – ",
+    "openInvoicesNote_one": "{{count}} not yet fully paid – ",
+    "openInvoicesNote_other": "{{count}} not yet fully paid – ",
     "openInvoicesLink": "view",
     "limitsTitle": "Small-business thresholds (§19 UStG)",
     "prevYearGaugeLabel": "Previous year's revenue (set manually in Settings) — limit {{limit}}",
@@ -67,12 +66,14 @@
     "newInvoice": "New invoice",
     "emptyTitle": "No invoices yet",
     "emptyText": "Create your first invoice as soon as you have your first job.",
-    "resetToOpen": "Reset",
     "statusPaid": "paid",
+    "statusOverpaid": "overpaid",
     "statusOpen": "open",
+    "statusPartial": "partially paid",
     "statusDraft": "Draft",
     "statusCancelled": "cancelled",
-    "numberPending": "–"
+    "numberPending": "–",
+    "remainingDue": "{{amount}} still due"
   },
   "invoiceForm": {
     "validationNeedsItem": "Please enter at least one line item.",
@@ -112,7 +113,6 @@
   "invoiceDetail": {
     "notFound": "Invoice not found.",
     "issue": "Issue",
-    "markOpen": "Mark as open",
     "print": "Print / save as PDF",
     "confirmDeleteText": "Really delete this invoice?",
     "confirmDeleteYes": "Yes, delete",
@@ -125,7 +125,21 @@
     "cancelledBanner": "This invoice was cancelled on {{date}}.",
     "cancelReasonLabel": "Reason for cancellation",
     "viewCancellationInvoice": "View cancellation invoice {{number}}",
-    "cancelsInvoiceNote": "This cancellation invoice cancels invoice {{number}}."
+    "cancelsInvoiceNote": "This cancellation invoice cancels invoice {{number}}.",
+    "paymentsTitle": "Payments",
+    "amountPaidLabel": "Paid",
+    "amountDueLabel": "Due",
+    "overpaidWarning": "This invoice has been overpaid – recorded payments exceed the invoice total.",
+    "paymentMethodLabel": "Payment method",
+    "paymentMethods": {
+      "bank_transfer": "Bank transfer",
+      "cash": "Cash",
+      "paypal": "PayPal",
+      "other": "Other"
+    },
+    "noPayments": "No payment recorded yet.",
+    "recordPayment": "Record payment",
+    "deletePayment": "Remove payment"
   },
   "expenses": {
     "title": "Expenses",
