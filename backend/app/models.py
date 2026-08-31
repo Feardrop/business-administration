@@ -14,6 +14,7 @@ See /AGENTS.md for the full workflow.
 """
 
 import datetime as dt
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -31,6 +32,30 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+def invoice_gross_total(invoice: "Invoice", kleinunternehmer: bool) -> Decimal:
+    """Gross total for `invoice`'s current items, given whether the
+    Kleinunternehmer exemption applies (0% VAT regardless of what the
+    per-line `vat_rate`s happen to be, vs. each line's own rate otherwise).
+
+    Takes `kleinunternehmer` as an explicit parameter rather than reading
+    `invoice.is_kleinunternehmer` directly, because this is also used
+    against not-yet-issued drafts (`is_kleinunternehmer` is null until
+    issue time) — see `crud._missing_issue_fields`, which needs a
+    *hypothetical* gross under the current `settings.kleinunternehmer` to
+    decide whether the §33 UStDV Kleinbetragsrechnung threshold applies.
+    `Invoice.gross_total` below is the issued-invoice convenience wrapper
+    that resolves this against the invoice's own snapshot — the one place
+    issue #30's payment-ledger status derivation (`crud.recompute_status`)
+    needs a real gross to compare payments against.
+    """
+    total = Decimal("0")
+    for item in invoice.items:
+        net = Decimal(item.qty) * Decimal(item.price)
+        rate = Decimal("0") if kleinunternehmer else Decimal(item.vat_rate or 0)
+        total += net * (Decimal("1") + rate / Decimal("100"))
+    return total
+
+
 class Settings(Base):
     """Singleton row (id is always 1) holding the business's own data."""
 
@@ -41,6 +66,10 @@ class Settings(Base):
     owner_name = Column(String, default="")
     address = Column(Text, default="")
     tax_number = Column(String, default="")
+    # Umsatzsteuer-Identifikationsnummer — separate from tax_number
+    # (Steuernummer): many small Kleingewerbe businesses never apply for one,
+    # so this stays optional and is printed only when set (see issue #33).
+    ust_id_nr = Column(String, default="")
     iban = Column(String, default="")
     kleinunternehmer = Column(Boolean, default=True, nullable=False)
     prev_year_revenue = Column(Numeric(10, 2), default=0)
@@ -48,27 +77,93 @@ class Settings(Base):
 
 
 class Invoice(Base):
+    """A draft or issued invoice.
+
+    Status lifecycle (see issue #25 and the roadmap issues stacked on top
+    of it — #26 cancellation, #30 partial payments):
+
+        draft --issue--> offen --pay--> bezahlt
+          |                 |
+          |                 +--cancel--> storniert   (issue #26)
+          +--delete                        ^
+                                            |
+                    offen --partial payment-+--> teilweise bezahlt --(pay
+                                                  rest)--> bezahlt      (#30)
+                    teilweise bezahlt --cancel--> storniert            (#26)
+
+    All five statuses are produced by this codebase now that #30 has
+    landed: `crud.recompute_status` derives "offen"/"teilweise
+    bezahlt"/"bezahlt" from the sum of an invoice's `payments` vs. its
+    `gross_total` every time a payment is recorded or removed, replacing
+    the old boolean `paid_date` toggle (a payment actually received in
+    December but only entered into the app in March used to get
+    attributed to the wrong tax year — see `Payment.date` below, the
+    Zufluss-Prinzip fix).
+
+    "storniert" is reached only via crud.cancel_invoice — never by
+    deleting or silently editing an issued invoice, which §14c UStG
+    forbids. It is a terminal status that does not derive from payment
+    state: `crud.recompute_status` checks for it first and short-circuits
+    unconditionally, so a cancelled invoice's (now moot) payment history
+    can never flip it back to "offen"/"teilweise bezahlt"/"bezahlt".
+
+    A draft has no `number` (nothing is burned until `issue_invoice`
+    assigns one) and no `is_kleinunternehmer` snapshot (that snapshot,
+    alongside the number, is only meaningful once the invoice is
+    actually issued — see crud.issue_invoice). Both become permanent,
+    non-null facts at issue time.
+    """
+
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True)
-    number = Column(String, unique=True, nullable=False, index=True)
+    # Nullable: unassigned while status="draft", assigned once (and never
+    # changed again) by crud.issue_invoice. SQL unique constraints allow
+    # multiple NULLs, so many concurrent drafts can coexist without
+    # colliding on uniqueness.
+    number = Column(String, unique=True, nullable=True, index=True)
     # The numeric part `number` is formatted from. This is what numbering
     # actually operates on (MAX(sequence) + 1, scoped to the invoice's
     # creation year) - `number` is a derived display string, never parsed
     # back apart to figure out the next value. See crud._next_invoice_number.
-    sequence = Column(Integer, nullable=False)
+    # Null for drafts, alongside `number`; assigned together at issue time.
+    sequence = Column(Integer, nullable=True)
     date = Column(Date, nullable=False)
     client_name = Column(String, nullable=False)
     client_address = Column(Text, default="")
-    is_kleinunternehmer = Column(Boolean, nullable=False)
-    vat_rate = Column(Numeric(5, 2), default=0)
+    # §14 Abs. 4 Nr. 6 UStG: the invoice must state *when the service was
+    # rendered*, which is not necessarily `date` (the document/issue date).
+    # Exactly one of these two is expected to be set — an exact day
+    # (service_date) or a free-text period like "August 2026"
+    # (service_period_text) for work that spans/settles later than it was
+    # performed. Both nullable while a draft; crud.issue_invoice requires at
+    # least one to be set before issuing (service_date wins if somehow both
+    # are). See issue #33.
+    service_date = Column(Date, nullable=True)
+    service_period_text = Column(String, nullable=True)
+    # Null while the invoice is a draft; snapshotted from settings at issue
+    # time (see crud.issue_invoice) and immutable afterward.
+    is_kleinunternehmer = Column(Boolean, nullable=True)
     note = Column(Text, default="")
-    status = Column(String, default="offen")  # "offen" | "bezahlt"
-    paid_date = Column(Date, nullable=True)
+    status = Column(String, default="draft")  # see class docstring for the full lifecycle
+    # Set once, at issue time, alongside `number`. Null for drafts.
+    issued_at = Column(Date, nullable=True)
     # dt.datetime.utcnow() is deprecated (returns a naive datetime with no
     # indication it's UTC); this keeps the same naive-UTC value the column
     # already relied on rather than switching to timezone-aware storage.
     created_at = Column(DateTime, default=lambda: dt.datetime.now(dt.UTC).replace(tzinfo=None))
+
+    # Set by crud.cancel_invoice, together with status="storniert". Null
+    # otherwise. `cancel_reason` is the free-text justification the user
+    # entered — kept on the original for the record even though the
+    # cancellation invoice itself is the actual legal counter-document.
+    cancelled_at = Column(Date, nullable=True)
+    cancel_reason = Column(Text, nullable=True)
+    # Set only on a cancellation invoice itself, pointing back at the
+    # invoice it cancels. Null on every other invoice (including the
+    # cancelled original, which is instead reachable via the
+    # `cancellation_invoice` relationship below).
+    cancels_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True, index=True)
 
     items = relationship(
         "InvoiceItem",
@@ -76,6 +171,72 @@ class Invoice(Base):
         cascade="all, delete-orphan",
         order_by="InvoiceItem.id",
     )
+    # The payment ledger (issue #30) replacing the old boolean paid_date.
+    # Ordered by date first (not insertion order) so a backdated payment
+    # entered after the fact still shows up in its chronological place.
+    payments = relationship(
+        "Payment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="Payment.date, Payment.id",
+    )
+    # Self-referential one-to-one pair navigating both directions of a
+    # cancellation:
+    #   cancellation_invoice.cancels_invoice        -> the original
+    #   original_invoice.cancellation_invoice        -> the cancellation
+    # See the SQLAlchemy adjacency-list pattern (remote_side on exactly one
+    # side of the pair) — https://docs.sqlalchemy.org/en/20/orm/self_referential.html
+    cancellation_invoice = relationship(
+        "Invoice",
+        back_populates="cancels_invoice",
+        uselist=False,
+    )
+    cancels_invoice = relationship(
+        "Invoice",
+        back_populates="cancellation_invoice",
+        remote_side=[id],
+    )
+
+    @property
+    def cancellation_invoice_id(self) -> int | None:
+        """Convenience read-only mirror of `cancellation_invoice.id`, so
+        `schemas.InvoiceOut` can expose the reverse link (original ->
+        cancellation) as a plain id, same shape as `cancels_invoice_id`.
+        """
+        return self.cancellation_invoice.id if self.cancellation_invoice is not None else None
+
+    @property
+    def gross_total(self) -> Decimal:
+        """This invoice's own gross total, resolved against its snapshotted
+        `is_kleinunternehmer` — always a definite bool by the time an
+        invoice can carry payments (payments only ever apply post-issue).
+        See `invoice_gross_total` above for the shared computation this
+        wraps.
+        """
+        return invoice_gross_total(self, bool(self.is_kleinunternehmer))
+
+    @property
+    def amount_paid(self) -> Decimal:
+        """Sum of every recorded `Payment` for this invoice — the actual
+        cash received to date (issue #30), independent of `status`.
+        """
+        return sum((Decimal(p.amount) for p in self.payments), Decimal("0"))
+
+    @property
+    def amount_due(self) -> Decimal:
+        """Remaining balance, floored at 0 so an overpayment (see
+        `overpaid`) never surfaces as a nonsensical negative amount due.
+        """
+        due = self.gross_total - self.amount_paid
+        return due if due > 0 else Decimal("0")
+
+    @property
+    def overpaid(self) -> bool:
+        """True once recorded payments exceed the gross total. Purely a
+        display flag (issue #30 scope) — no refund workflow, no Skonto
+        handling; just don't let the UI show a negative amount due.
+        """
+        return self.amount_paid > self.gross_total
 
 
 class InvoiceItem(Base):
@@ -86,8 +247,46 @@ class InvoiceItem(Base):
     description = Column(String, nullable=False)
     qty = Column(Numeric(10, 2), nullable=False, default=1)
     price = Column(Numeric(10, 2), nullable=False, default=0)  # net unit price
+    # Moved here from Invoice (issue #33): mixing rates on one invoice (e.g.
+    # 19% shooting fee + 7% image-licence line) is normal for this business
+    # and previously forced splitting across two invoices. Default 0 matches
+    # the old Invoice.vat_rate column's default, for the migration backfill.
+    vat_rate = Column(Numeric(5, 2), nullable=False, default=0)
 
     invoice = relationship("Invoice", back_populates="items")
+
+
+class Payment(Base):
+    """One entry in an invoice's payment ledger (issue #30) — replaces the
+    old boolean `Invoice.paid_date`, which could only represent "fully
+    paid, on this one date" and always used *today's* date regardless of
+    when the money was actually received.
+
+    `date` defaults to today (see `crud.record_payment`) but is always
+    user-overridable, which is the actual fix for the tax-year
+    attribution bug: German cash-basis tax law (Zufluss-Prinzip)
+    attributes income to the year money was actually received, not the
+    year it was typed into the app. Dashboard income-by-year aggregation
+    must bucket by `date`, not by when the invoice was issued.
+
+    `method` is free text (kept simple per issue #30's scope — no
+    bank-auto-matching yet, that's a future epic this table will
+    eventually feed) rather than a DB-level enum; the frontend offers a
+    small fixed set of translated options (see `PAYMENT_METHODS` in
+    frontend/src/utils.ts) but nothing here enforces the value is one of
+    them.
+    """
+
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True)
+    invoice_id = Column(Integer, ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    method = Column(String, nullable=False, default="")
+    note = Column(Text, nullable=True)
+
+    invoice = relationship("Invoice", back_populates="payments")
 
 
 class Expense(Base):

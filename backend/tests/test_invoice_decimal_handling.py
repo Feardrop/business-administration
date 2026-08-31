@@ -9,25 +9,40 @@ case where a value round-trips through SQLite and comes back as a binary
 float with rounding error.
 """
 
+import datetime as dt
 from decimal import Decimal
 
 from app import crud, schemas
 
 
 def _create_invoice(db_session):
-    crud.update_settings(db_session, schemas.SettingsSchema(kleinunternehmer=False))
-    return crud.create_invoice(
+    crud.update_settings(
+        db_session,
+        schemas.SettingsSchema(
+            business_name="Decimal Studio",
+            address="Teststr. 1",
+            tax_number="DE123456789",
+            kleinunternehmer=False,
+        ),
+    )
+    draft = crud.create_draft(
         db_session,
         schemas.InvoiceCreate(
             date="2026-04-01",
             client_name="Decimal Client",
-            vat_rate=Decimal("19"),
+            client_address="Client street 1",
+            service_date=dt.date(2026, 4, 1),
             items=[
-                schemas.InvoiceItemIn(description="Shoot A", qty=Decimal("2"), price=Decimal("99.99")),
-                schemas.InvoiceItemIn(description="Shoot B", qty=Decimal("1.5"), price=Decimal("40.01")),
+                schemas.InvoiceItemIn(
+                    description="Shoot A", qty=Decimal("2"), price=Decimal("99.99"), vat_rate=Decimal("19")
+                ),
+                schemas.InvoiceItemIn(
+                    description="Shoot B", qty=Decimal("1.5"), price=Decimal("40.01"), vat_rate=Decimal("19")
+                ),
             ],
         ),
     )
+    return crud.issue_invoice(db_session, draft)
 
 
 def test_item_qty_and_price_are_decimal_on_the_freshly_created_object(db_session):
@@ -42,8 +57,9 @@ def test_item_qty_and_price_are_decimal_on_the_freshly_created_object(db_session
 
 def test_vat_rate_is_decimal(db_session):
     invoice = _create_invoice(db_session)
-    assert isinstance(invoice.vat_rate, Decimal)
-    assert invoice.vat_rate == Decimal("19")
+    for item in invoice.items:
+        assert isinstance(item.vat_rate, Decimal)
+        assert item.vat_rate == Decimal("19")
 
 
 def test_decimal_survives_a_fresh_round_trip_from_the_database(db_session):
@@ -78,7 +94,9 @@ def test_line_and_grand_totals_computed_from_the_items_stay_decimal(db_session):
     assert isinstance(net_total, Decimal)
     assert net_total == Decimal("2") * Decimal("99.99") + Decimal("1.5") * Decimal("40.01")
 
-    vat = net_total * invoice.vat_rate / Decimal("100")
+    vat = sum(
+        (item.qty * item.price * item.vat_rate / Decimal("100") for item in invoice.items), Decimal("0")
+    )
     assert isinstance(vat, Decimal)
 
 

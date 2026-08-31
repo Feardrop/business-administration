@@ -27,15 +27,41 @@ from app import crud, models, schemas
 from app.database import SessionLocal
 
 
+def _ensure_valid_settings(db):
+    """Backfill the §14 UStG mandatory supplier fields, preserving whatever
+    else a test already set (e.g. `invoice_prefix`) rather than clobbering it.
+    """
+    settings = crud.get_settings(db)
+    if settings.business_name:
+        return
+    crud.update_settings(
+        db,
+        schemas.SettingsSchema(
+            business_name="Numbering Studio",
+            owner_name=settings.owner_name,
+            address="Teststr. 1",
+            tax_number="DE123456789",
+            ust_id_nr=settings.ust_id_nr,
+            iban=settings.iban,
+            kleinunternehmer=settings.kleinunternehmer,
+            prev_year_revenue=settings.prev_year_revenue,
+            invoice_prefix=settings.invoice_prefix,
+        ),
+    )
+
+
 def _make_invoice(db, client_name="Client"):
-    return crud.create_invoice(
+    _ensure_valid_settings(db)
+    draft = crud.create_draft(
         db,
         schemas.InvoiceCreate(
             date="2026-01-15",
             client_name=client_name,
+            service_date=dt.date(2026, 1, 15),
             items=[schemas.InvoiceItemIn(description="Shoot", qty=Decimal("1"), price=Decimal("100"))],
         ),
     )
+    return crud.issue_invoice(db, draft)
 
 
 def test_delete_middle_then_create_reuses_no_number(db_session):
@@ -67,7 +93,6 @@ def test_numeric_prefix_does_not_inflate_count(db_session):
         date=dt.date(past_year, 12, 31),
         client_name="Phantom",
         is_kleinunternehmer=True,
-        vat_rate=Decimal("0"),
         status="offen",
         created_at=dt.datetime(past_year, 12, 31),
     )

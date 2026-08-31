@@ -19,6 +19,7 @@ const settings: Settings = {
   owner_name: "Jane Doe",
   address: "",
   tax_number: "DE123456789",
+  ust_id_nr: "",
   iban: "",
   kleinunternehmer: true,
   prev_year_revenue: "0",

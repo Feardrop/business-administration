@@ -1,6 +1,31 @@
-import type { Expense, ExpenseCreateInput, ExpenseUpdateInput, Invoice, InvoiceCreateInput, Settings } from "./types";
+import type {
+  CancelAndCorrectResult,
+  Expense,
+  ExpenseCreateInput,
+  ExpenseUpdateInput,
+  Invoice,
+  InvoiceCreateInput,
+  InvoiceUpdateInput,
+  PaymentCreateInput,
+  Settings,
+} from "./types";
 
 const BASE = "/api";
+
+// Raised for a §14 UStG issue-time validation failure (see
+// backend/app/routers/invoices.py's 422 on POST /invoices/{id}/issue) —
+// `missingFields` carries the precise list of missing requirements
+// alongside the combined human-readable `message`, for any caller that
+// wants to render them separately instead of as one string.
+export class InvoiceIssueValidationError extends Error {
+  missingFields: string[];
+
+  constructor(message: string, missingFields: string[]) {
+    super(message);
+    this.name = "InvoiceIssueValidationError";
+    this.missingFields = missingFields;
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, {
@@ -8,14 +33,24 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: unknown = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail || detail;
+      detail = body.detail ?? detail;
     } catch (_) {
       /* ignore, keep statusText */
     }
-    throw new Error(detail);
+    if (typeof detail === "string") {
+      throw new Error(detail);
+    }
+    // Structured {"message": ..., "missing_fields": [...]} shape (see
+    // crud.InvoiceIssueValidationError / routers/invoices.py).
+    const structured = detail as { message?: string; missing_fields?: string[] };
+    const missingFields = structured.missing_fields || [];
+    const message = missingFields.length
+      ? `${structured.message || res.statusText} ${missingFields.join(", ")}`
+      : structured.message || res.statusText;
+    throw new InvoiceIssueValidationError(message, missingFields);
   }
   if (res.status === 204) return null as T;
   return res.json();
@@ -27,11 +62,33 @@ export const api = {
 
   listInvoices: () => request<Invoice[]>("/invoices"),
   getInvoice: (id: number) => request<Invoice>(`/invoices/${id}`),
+  // Creates a draft — nothing is issued/numbered yet, see InvoiceUpdateInput.
   createInvoice: (data: InvoiceCreateInput) =>
     request<Invoice>("/invoices", { method: "POST", body: JSON.stringify(data) }),
-  markInvoicePaid: (id: number) => request<Invoice>(`/invoices/${id}/mark-paid`, { method: "POST" }),
-  markInvoiceOpen: (id: number) => request<Invoice>(`/invoices/${id}/mark-open`, { method: "POST" }),
+  updateInvoiceDraft: (id: number, data: InvoiceUpdateInput) =>
+    request<Invoice>(`/invoices/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  issueInvoice: (id: number) => request<Invoice>(`/invoices/${id}/issue`, { method: "POST" }),
   deleteInvoice: (id: number) => request<null>(`/invoices/${id}`, { method: "DELETE" }),
+  // A boolean paid/open toggle doesn't fit a many-payments ledger (issue
+  // #30) -- these replace the old markInvoicePaid/markInvoiceOpen with a
+  // real payment history. recordPayment returns the updated invoice
+  // (new payment + recomputed status) in one round trip; deletePayment
+  // returns nothing, so callers refetch the invoice list same as any
+  // other delete.
+  recordPayment: (invoiceId: number, data: PaymentCreateInput) =>
+    request<Invoice>(`/invoices/${invoiceId}/payments`, { method: "POST", body: JSON.stringify(data) }),
+  deletePayment: (invoiceId: number, paymentId: number) =>
+    request<null>(`/invoices/${invoiceId}/payments/${paymentId}`, { method: "DELETE" }),
+  // §14c UStG: an issued invoice can't be deleted or silently corrected --
+  // it's reversed with a formal, separately-numbered cancellation invoice
+  // (Stornorechnung) instead. See issue #26.
+  cancelInvoice: (id: number, reason: string) =>
+    request<Invoice>(`/invoices/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  cancelAndCorrectInvoice: (id: number, reason: string) =>
+    request<CancelAndCorrectResult>(`/invoices/${id}/cancel-and-correct`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 
   listExpenses: (year?: number | string) => request<Expense[]>(`/expenses${year ? `?year=${year}` : ""}`),
   createExpense: (data: ExpenseCreateInput) =>

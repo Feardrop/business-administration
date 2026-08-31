@@ -150,11 +150,16 @@ enough to pick up new migrations in production — no manual DB step.
 - **Invoice numbering** happens server-side in `crud._next_invoice_number`
   (year + running count + optional prefix from settings). Don't let the
   frontend generate or submit invoice numbers.
-- **`is_kleinunternehmer` and `vat_rate` are snapshotted onto the
-  `Invoice` row at creation time** from the current settings — this is
-  intentional. If the user later flips the Kleinunternehmer setting,
-  past invoices must keep showing what was actually true when they were
-  issued. Don't "fix" this into a live join against `settings`.
+- **`is_kleinunternehmer` is snapshotted onto the `Invoice` row at issue
+  time** from the current settings — this is intentional. If the user
+  later flips the Kleinunternehmer setting, past invoices must keep
+  showing what was actually true when they were issued. Don't "fix"
+  this into a live join against `settings`. `vat_rate` lives on
+  `InvoiceItem` (one rate per line, since mixing 19%/7% lines on one
+  invoice is normal for this business — see issue #33); `issue_invoice`
+  zeroes every item's `vat_rate` at issue time when
+  `settings.kleinunternehmer` is true, the same way it used to zero the
+  single invoice-level `vat_rate`.
 - **Design tokens** (colors, fonts) live as CSS custom properties at the
   top of `frontend/src/styles.css` (`--paper`, `--ink`, `--accent`,
   etc.). Reuse them; don't hardcode hex values in components.

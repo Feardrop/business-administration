@@ -12,7 +12,7 @@ vi.mock("react-i18next", async (importOriginal) => {
       t: (key: string) => {
         const translations: Record<string, string> = {
           "invoiceForm.numberLabel": "Invoice number",
-          "invoiceForm.numberPlaceholder": "assigned on save",
+          "invoiceForm.numberPending": "assigned when issued",
           "invoiceForm.dateLabel": "Invoice date",
           "invoiceForm.clientNameLabel": "Client – name / company",
           "invoiceForm.clientNamePlaceholder": "e.g. Sample Ltd.",
@@ -33,10 +33,12 @@ vi.mock("react-i18next", async (importOriginal) => {
           "invoiceForm.total": "Total amount",
           "invoiceForm.noteLabel": "Note (optional, doesn't appear on the invoice)",
           "invoiceForm.notePlaceholder": "e.g. internal note",
-          "invoiceForm.submit": "Create invoice",
+          "invoiceForm.saveDraft": "Save draft",
+          "invoiceForm.issue": "Issue invoice",
           "invoiceForm.validationNeedsItem": "Please enter at least one line item.",
           "invoiceForm.saveError": "Error while saving.",
           "invoiceForm.title": "New invoice",
+          "invoiceForm.titleEdit": "Edit draft",
           "common.back": "Back",
         };
         return translations[key] || key;
@@ -55,28 +57,30 @@ describe("InvoiceForm", () => {
     owner_name: "John Doe",
     address: "123 Main St",
     tax_number: "DE123456789",
+    ust_id_nr: "",
     iban: "DE89370400440532013000",
     kleinunternehmer: false,
     invoice_prefix: "FOTO",
     prev_year_revenue: "0",
   };
 
-  it("renders the invoice number field with placeholder text instead of a computed value", () => {
-    render(<InvoiceForm settings={mockSettings} onCancel={() => {}} onSubmit={async () => {}} />);
+  it("renders the invoice number field with a pending value instead of a computed one, for a brand-new draft", () => {
+    render(
+      <InvoiceForm settings={mockSettings} onCancel={() => {}} onSaveDraft={async () => {}} onIssue={async () => {}} />
+    );
 
-    const numberInput = screen.getByPlaceholderText("assigned on save") as HTMLInputElement;
+    const numberInput = screen.getByDisplayValue("assigned when issued") as HTMLInputElement;
     expect(numberInput).toBeInTheDocument();
     expect(numberInput).toBeDisabled();
-    expect(numberInput.value).toBe("");
   });
 
   it("does not compute or display an invoice number preview", () => {
-    render(<InvoiceForm settings={mockSettings} onCancel={() => {}} onSubmit={async () => {}} />);
+    render(
+      <InvoiceForm settings={mockSettings} onCancel={() => {}} onSaveDraft={async () => {}} onIssue={async () => {}} />
+    );
 
-    const numberInput = screen.getByPlaceholderText("assigned on save") as HTMLInputElement;
-    // The input should be empty (no computed value like "FOTO2026-001")
-    expect(numberInput.value).toBe("");
-    // Verify it's truly disabled so users can't edit it
-    expect(numberInput).toBeDisabled();
+    // The field never shows a computed value like "FOTO2026-001" - only the
+    // pending placeholder (no `invoice` prop => no real invoice.number yet).
+    expect(screen.queryByDisplayValue(/FOTO/)).not.toBeInTheDocument();
   });
 });

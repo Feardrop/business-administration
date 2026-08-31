@@ -11,6 +11,127 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Added
 
+- Payment ledger replacing the boolean paid/open toggle (issue #30): an
+  invoice's status is no longer a manual "mark paid" button — it's derived
+  from a real `Payment` history, so partial payments and cash-basis
+  tax-year attribution (Zufluss-Prinzip) both work correctly.
+  - New `Payment` model (`invoice_id`, `date`, `amount`, `method`, `note`).
+    `date` defaults to today but is always user-overridable — this is the
+    actual fix for the tax-year bug: recording a payment used to always
+    stamp `paid_date = today()`, so a payment physically received in
+    December but only entered into the app in March got attributed to the
+    wrong tax year.
+  - `POST /api/invoices/{id}/payments` (body: `{"amount", "date"?,
+    "method"?, "note"?}`) appends a payment and recomputes the invoice's
+    status from the sum of its payments vs. its gross total: `offen` (no
+    payments), `teilweise bezahlt` (partial), `bezahlt` (full or more).
+    `DELETE /api/invoices/{id}/payments/{payment_id}` removes one and
+    recomputes the same way. `POST .../mark-paid` and `.../mark-open` are
+    gone.
+  - `storniert` (issue #26) stays terminal: `crud.recompute_status` checks
+    for it first and short-circuits unconditionally, so a cancelled
+    invoice's payment history can never flip it back to an active status.
+    Cancelling a `teilweise bezahlt` invoice is now allowed too (`POST
+    .../cancel[-and-correct]` previously only accepted `offen`/`bezahlt`,
+    a gap left by #26 predating this status).
+  - Overpayment (payments summing above the gross total) is flagged via
+    `InvoiceOut.overpaid` rather than rejected, capped, or left to show a
+    negative amount due — no refund workflow, no Skonto handling, both out
+    of scope here.
+  - The invoice detail page gained a payment-history list and a "record
+    payment" form (amount, date defaulting to today but editable, method)
+    replacing the single mark-paid button; the invoice list shows a
+    "teilweise bezahlt" badge with the remaining balance, and an
+    "überzahlt"/"overpaid" badge on an overpaid invoice.
+  - Dashboard income/VAT/revenue figures are now attributed by each
+    *payment's own* date, not by invoice status/date — a partial payment's
+    income/VAT are split proportionally to the share of the invoice's
+    gross it settles. The "open" balance sums the remaining amount due
+    (gross minus payments-to-date) for a `teilweise bezahlt` invoice, not
+    its full gross.
+  - Migration backfills every legacy `bezahlt` invoice's non-null
+    `paid_date` into one full-gross-amount `Payment` row dated `paid_date`,
+    then drops the now-redundant `Invoice.paid_date` column.
+- Invoice cancellation / Stornorechnung (issue #26): an issued invoice
+  (`offen`/`bezahlt`) can no longer be edited away or is left with no undo
+  path — §14c UStG requires reversing it with a formal, separately-numbered
+  counter-document instead of deleting or silently correcting it.
+  - `POST /api/invoices/{id}/cancel` (body: `{"reason": "..."}`, required
+    non-blank) marks the original `storniert` (`cancelled_at`,
+    `cancel_reason`) and, in the same transaction, creates and issues a new
+    Invoice whose line items are copies of the original's with `qty`
+    negated (`price`/`vat_rate` unchanged per line) — routed through the
+    existing `issue_invoice` path, so the cancellation invoice gets its own
+    real sequential number and is_kleinunternehmer snapshot, not a flag on
+    the original. `cancels_invoice_id` links the cancellation back to what
+    it cancels; `cancellation_invoice_id` on `InvoiceOut` is the reverse
+    link.
+  - `POST /api/invoices/{id}/cancel-and-correct` does the same cancellation
+    and additionally returns a fresh editable draft pre-filled from the
+    original (client, items, service date), ready to correct and re-issue.
+  - `storniert` is a terminal status, reachable only via these two routes;
+    a draft is still just deleted, and an already-`storniert` invoice
+    cannot be cancelled again.
+  - The frontend gained Cancel / Cancel-and-correct actions (with a
+    reason-entry step) on an `offen`/`bezahlt` invoice's detail page, a
+    "storniert" banner linking to the resulting cancellation invoice (and,
+    on a cancellation invoice, a link back to the original), and a
+    `storniert` badge on the invoice list. Dashboard revenue/VAT/open-
+    balance/threshold figures are now computed by a single
+    `computeInvoiceStats()` that excludes `storniert` invoices, rather than
+    relying on each stat's own status filter happening to already do so.
+  - New UI copy uses "Storno"/"stornieren"/"Stornorechnung" (German) and
+    "cancel"/"cancellation"/"cancellation invoice" (English) —
+    "Gutschrift"/"credit note" is a different legal instrument under §14c
+    UStG and must never appear here; guarded by a permanent test that scans
+    both locale files for the term.
+- §14 UStG mandatory invoice fields (issue #33):
+  - `Invoice.service_date`/`service_period_text` — the invoice can now
+    state when the service was actually rendered (an exact Leistungsdatum,
+    or a free-text Leistungszeitraum like "August 2026" for work invoiced
+    later than it was performed), separate from the document date. The UI
+    lets the user pick one mode or the other; the printed document shows
+    whichever is set.
+  - `vat_rate` moved from `Invoice` to `InvoiceItem` — mixing 19%/7% lines
+    on one invoice (e.g. a shooting fee plus an image licence) no longer
+    requires splitting into two invoices. `invoiceTotals()` now groups net/
+    VAT subtotals per distinct rate present (a new `breakdown` array), and
+    the printed invoice shows a per-rate breakdown table instead of a
+    single combined VAT line — Kleinunternehmer invoices still show no VAT
+    breakdown at all.
+  - `Settings.ust_id_nr` (Umsatzsteuer-Identifikationsnummer), separate
+    from `tax_number` (Steuernummer) and optional — printed on the invoice
+    only when set.
+  - Issuing a draft (`POST /api/invoices/{id}/issue`) now validates the
+    full §14 Abs. 4 UStG mandatory-field checklist (supplier name/address,
+    Steuernummer-or-USt-IdNr, recipient name, service date/period, at
+    least one line item) and fails with a structured 422
+    (`{"message": ..., "missing_fields": [...]}`) naming exactly what's
+    missing, rather than assigning a number regardless. Under a 250€ gross
+    total, the §33 UStDV Kleinbetragsrechnung exemption relaxes the
+    recipient-address requirement.
+  - The dashboard's missing-required-settings banner now also flags a
+    missing Steuernummer-or-USt-IdNr and address, consistent with the new
+    issue-time validation.
+  - Migration backfills every existing `InvoiceItem` with its parent
+    invoice's old `vat_rate` before dropping the now-redundant
+    `Invoice.vat_rate` column.
+- Draft invoice status (issue #25): new invoices now start as editable,
+  numberless drafts instead of immediately burning an invoice number.
+  Nothing is assigned — no `number`, no `is_kleinunternehmer`/`vat_rate`
+  settings snapshot — until the draft is explicitly issued
+  (`POST /api/invoices/{id}/issue`), which is the one-way transition that
+  assigns the number, snapshots settings, stamps `issued_at`, and locks
+  the record. Drafts can be freely edited (`PATCH /api/invoices/{id}`) or
+  deleted; issued invoices are immutable via either route (409). An
+  abandoned/deleted draft never consumes a number slot, so the sequence
+  stays gap-free (GoBD). The frontend gained a "Save draft"/"Issue" pair
+  of actions on the invoice form, a draft badge on the invoice list, and
+  edit/issue/delete actions on the invoice detail page gated on draft
+  status. The status column's target lifecycle now also documents
+  "teilweise bezahlt" and "storniert" as future states for the
+  cancellation (#26) and partial-payment (#30) issues stacked on top of
+  this one, though neither is implemented yet.
 - German/English i18n throughout the UI (i18next/react-i18next), with the
   printable invoice document intentionally staying German regardless of
   the selected language, since it's the legal document under German tax

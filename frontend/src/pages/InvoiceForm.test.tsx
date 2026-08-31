@@ -19,6 +19,7 @@ const settings: Settings = {
   owner_name: "",
   address: "",
   tax_number: "DE123456789",
+  ust_id_nr: "",
   iban: "",
   kleinunternehmer: false,
   prev_year_revenue: "0",
@@ -26,13 +27,20 @@ const settings: Settings = {
 };
 
 describe("InvoiceForm", () => {
-  it("shows a VAT-rate selector when not a Kleinunternehmer", () => {
-    render(<InvoiceForm settings={settings} onCancel={vi.fn()} onSubmit={vi.fn()} />);
-    expect(screen.getByText(/19 %/)).toBeInTheDocument();
+  it("shows a per-line VAT-rate selector when not a Kleinunternehmer", () => {
+    render(<InvoiceForm settings={settings} onCancel={vi.fn()} onSaveDraft={vi.fn()} onIssue={vi.fn()} />);
+    expect(screen.getByRole("combobox", { name: /Umsatzsteuersatz/ })).toBeInTheDocument();
   });
 
   it("hides the VAT-rate selector for a Kleinunternehmer", () => {
-    render(<InvoiceForm settings={{ ...settings, kleinunternehmer: true }} onCancel={vi.fn()} onSubmit={vi.fn()} />);
-    expect(screen.queryByText(/19 %/)).not.toBeInTheDocument();
+    render(
+      <InvoiceForm
+        settings={{ ...settings, kleinunternehmer: true }}
+        onCancel={vi.fn()}
+        onSaveDraft={vi.fn()}
+        onIssue={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("combobox", { name: /Umsatzsteuersatz/ })).not.toBeInTheDocument();
   });
 });

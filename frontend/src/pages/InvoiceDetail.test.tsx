@@ -19,6 +19,7 @@ const settings: Settings = {
   owner_name: "Jane Doe",
   address: "Teststraße 1\n01001 Dresden",
   tax_number: "DE123456789",
+  ust_id_nr: "",
   iban: "DE00 0000 0000 0000 0000 00",
   kleinunternehmer: false,
   prev_year_revenue: "0",
@@ -31,13 +32,22 @@ const invoice: Invoice = {
   date: "2026-01-15",
   client_name: "Client A",
   client_address: "Kundenstraße 2\n01002 Dresden",
+  service_date: "2026-01-15",
+  service_period_text: null,
   is_kleinunternehmer: false,
-  vat_rate: "19",
   note: "",
   status: "offen",
-  paid_date: null,
+  issued_at: "2026-01-15",
   created_at: "2026-01-15T10:00:00",
-  items: [{ id: 1, description: "Shoot", qty: "1", price: "500" }],
+  cancelled_at: null,
+  cancel_reason: null,
+  cancels_invoice_id: null,
+  cancellation_invoice_id: null,
+  payments: [],
+  amount_paid: "0",
+  amount_due: "595",
+  overpaid: false,
+  items: [{ id: 1, description: "Shoot", qty: "1", price: "500", vat_rate: "19" }],
 };
 
 describe("InvoiceDetail", () => {
@@ -45,11 +55,17 @@ describe("InvoiceDetail", () => {
     render(
       <InvoiceDetail
         invoice={null}
+        invoices={[]}
         settings={settings}
         onBack={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
+        onEdit={vi.fn()}
+        onIssue={vi.fn()}
+        onRecordPayment={vi.fn()}
+        onDeletePayment={vi.fn()}
         onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        onCancelAndCorrect={vi.fn()}
+        onViewInvoice={vi.fn()}
       />
     );
     expect(screen.getByText(/nicht gefunden/)).toBeInTheDocument();
@@ -59,11 +75,17 @@ describe("InvoiceDetail", () => {
     render(
       <InvoiceDetail
         invoice={invoice}
+        invoices={[invoice]}
         settings={settings}
         onBack={vi.fn()}
-        onMarkPaid={vi.fn()}
-        onMarkOpen={vi.fn()}
+        onEdit={vi.fn()}
+        onIssue={vi.fn()}
+        onRecordPayment={vi.fn()}
+        onDeletePayment={vi.fn()}
         onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        onCancelAndCorrect={vi.fn()}
+        onViewInvoice={vi.fn()}
       />
     );
     expect(screen.getByText(/Client A/)).toBeInTheDocument();
