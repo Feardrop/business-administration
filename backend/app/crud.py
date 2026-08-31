@@ -37,10 +37,19 @@ def _next_invoice_number(db: Session, settings: models.Settings) -> tuple[int, s
     COUNT(*), so a deleted invoice (from the middle or the end of the
     series) never causes the next number to collide with or reuse an
     existing one - COUNT shifts down on delete, MAX doesn't.
+
+    "This year's invoices" is a real predicate on `created_at` (the
+    invoice's creation timestamp, which is what `year` itself comes
+    from) rather than a `LIKE` match against the formatted `number`
+    string - a numeric `invoice_prefix` (e.g. "2026") can make an
+    unrelated invoice's number contain the current year's digits purely
+    by coincidence, which a substring match would wrongly count.
     """
     year = dt.date.today().year
     max_sequence = (
-        db.query(func.max(models.Invoice.sequence)).filter(models.Invoice.number.like(f"%{year}%")).scalar()
+        db.query(func.max(models.Invoice.sequence))
+        .filter(extract("year", models.Invoice.created_at) == year)
+        .scalar()
     )
     sequence = (max_sequence or 0) + 1
     prefix = f"{settings.invoice_prefix}-" if settings.invoice_prefix else ""
