@@ -9,7 +9,7 @@ import InvoiceForm from "./pages/InvoiceForm";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Expenses from "./pages/Expenses";
 import SettingsPage from "./pages/SettingsPage";
-import type { Expense, ExpenseCreateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
+import type { Expense, ExpenseCreateInput, ExpenseUpdateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
 
 function nextInvoiceNumber(settings: Settings, invoices: Invoice[]): string {
   const year = new Date().getFullYear();
@@ -80,6 +80,10 @@ export default function App() {
     await api.createExpense(payload);
     await refreshExpenses();
   }
+  async function handleUpdateExpense(id: number, payload: ExpenseUpdateInput) {
+    await api.updateExpense(id, payload);
+    await refreshExpenses();
+  }
   async function handleDeleteExpense(id: number) {
     await api.deleteExpense(id);
     await refreshExpenses();
@@ -138,7 +142,7 @@ export default function App() {
           )}
 
           {tab === "expenses" && (
-            <Expenses expenses={expenses} onCreate={handleCreateExpense} onDelete={handleDeleteExpense} />
+            <Expenses expenses={expenses} onCreate={handleCreateExpense} onUpdate={handleUpdateExpense} onDelete={handleDeleteExpense} />
           )}
 
           {tab === "settings" && <SettingsPage settings={settings} onSave={handleSaveSettings} />}

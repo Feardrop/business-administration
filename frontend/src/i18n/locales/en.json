@@ -114,6 +114,9 @@
     "yearFilterLabel": "Year:",
     "emptyTitle": "No expenses recorded yet",
     "emptyText": "Add equipment, software, or travel costs above.",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
     "confirmDelete": "Delete?",
     "categories": {
       "equipment": "Equipment",

@@ -114,6 +114,9 @@
     "yearFilterLabel": "Jahr:",
     "emptyTitle": "Noch keine Ausgaben erfasst",
     "emptyText": "Trage Ausrüstung, Software oder Fahrtkosten oben ein.",
+    "edit": "Bearbeiten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
     "confirmDelete": "Löschen?",
     "categories": {
       "equipment": "Ausrüstung",
