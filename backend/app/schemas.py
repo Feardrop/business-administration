@@ -4,9 +4,10 @@ Amounts are typed as `Decimal` so FastAPI validates and serializes them
 with exact precision (matching the Numeric columns in models.py) instead
 of silently going through binary floats.
 """
+
 import datetime as dt
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,7 +42,7 @@ class InvoiceCreate(BaseModel):
     client_address: str = ""
     vat_rate: Decimal = Decimal("0")
     note: str = ""
-    items: List[InvoiceItemIn]
+    items: list[InvoiceItemIn]
 
 
 class InvoiceOut(BaseModel):
@@ -56,9 +57,9 @@ class InvoiceOut(BaseModel):
     vat_rate: Decimal
     note: str
     status: Literal["offen", "bezahlt"]
-    paid_date: Optional[dt.date]
+    paid_date: dt.date | None
     created_at: dt.datetime
-    items: List[InvoiceItemOut]
+    items: list[InvoiceItemOut]
 
 
 class ExpenseCreate(BaseModel):

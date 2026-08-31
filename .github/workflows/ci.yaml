@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [development, "release/**", main]
+  pull_request:
+    branches: [development, "release/**", main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # Enforces the development -> release/vX.Y.Z -> main workflow: a PR into
+  # main must come from a release branch. Doesn't apply to push events
+  # (e.g. the release merge itself) or to PRs targeting development/release/*.
+  branch-policy:
+    name: branch policy (PRs into main)
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require release/* as the source branch
+        env:
+          # github.head_ref is attacker-controllable on a PR from a fork;
+          # route it through env rather than interpolating it directly
+          # into the script (see actionlint's script-injection check).
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$HEAD_REF" != release/* ]]; then
+            echo "::error::PRs into main must come from a release/vX.Y.Z branch (got '$HEAD_REF'). See AGENTS.md's Branching and releasing section."
+            exit 1
+          fi
+
+  # Linting, formatting and the fast test suite - the same pre-commit
+  # config a contributor runs locally, so a clean local run means this
+  # job passes too.
+  pre-commit:
+    name: pre-commit suite (lint, format, fast tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit (default stage - lint, format, fast tests)
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  # Kept separate from the job above so a stale hook pin fails as its own
+  # clearly-labeled check rather than being buried in the lint/test job.
+  pre-commit-update:
+    name: pre-commit hooks up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install pre-commit
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Check every pinned hook rev is current
+        run: pre-commit run --all-files --hook-stage manual pre-commit-update
+
+  # Slower, more thorough tests - run on every push/PR, but kept out of the
+  # pre-commit job so that one stays fast enough to run on every local
+  # commit too (see .pre-commit-config.yaml's pre-push stage).
+  slow-tests:
+    name: slow tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Backend slow tests
+        # pyproject.toml's [tool.pytest.ini_options] sets testpaths and
+        # pythonpath, so this works from the repo root with no extra env.
+        run: pytest -m slow
+
+      - name: Frontend slow tests
+        run: npm run test:slow
+        working-directory: frontend
+
+  # A frontend build failure here means the deployable Docker image is
+  # broken even if lint/tests are green - see the Dockerfile's frontend
+  # build stage.
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image (not pushed - see cd.yaml for the release build)
+        run: docker build -t business-administration:ci .

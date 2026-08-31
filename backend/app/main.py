@@ -5,6 +5,7 @@ static/ (copied there during the Docker build — see /Dockerfile), also
 serves the React app itself. That's what lets this run as a single
 container: one Python process, one port.
 """
+
 from pathlib import Path
 
 from fastapi import FastAPI

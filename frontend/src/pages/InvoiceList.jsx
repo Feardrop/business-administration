@@ -9,9 +9,14 @@ export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMar
   return (
     <>
       <div className="page-head">
-        <div><h2>{t("invoiceList.title")}</h2><p>{t("invoiceList.totalCount", { count: list.length })}</p></div>
+        <div>
+          <h2>{t("invoiceList.title")}</h2>
+          <p>{t("invoiceList.totalCount", { count: list.length })}</p>
+        </div>
         <div className="actions">
-          <button className="btn btn-primary" onClick={onNew}><IconPlus /> {t("invoiceList.newInvoice")}</button>
+          <button className="btn btn-primary" onClick={onNew}>
+            <IconPlus /> {t("invoiceList.newInvoice")}
+          </button>
         </div>
       </div>
       {list.length === 0 ? (
@@ -37,19 +42,33 @@ export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMar
                 const t2 = invoiceTotals(inv);
                 return (
                   <tr key={inv.id}>
-                    <td className="mono" style={{ cursor: "pointer" }} onClick={() => onView(inv.id)}>{inv.number}</td>
+                    <td className="mono" style={{ cursor: "pointer" }} onClick={() => onView(inv.id)}>
+                      {inv.number}
+                    </td>
                     <td>{fmtDate(inv.date, lang)}</td>
                     <td>{inv.client_name}</td>
                     <td className="num">{fmtEUR(t2.gross, lang)}</td>
-                    <td>{inv.status === "bezahlt" ? <span className="badge badge-paid">{t("invoiceList.statusPaid")}</span> : <span className="badge badge-open">{t("invoiceList.statusOpen")}</span>}</td>
+                    <td>
+                      {inv.status === "bezahlt" ? (
+                        <span className="badge badge-paid">{t("invoiceList.statusPaid")}</span>
+                      ) : (
+                        <span className="badge badge-open">{t("invoiceList.statusOpen")}</span>
+                      )}
+                    </td>
                     <td>
                       <div className="row-actions">
                         {inv.status === "offen" ? (
-                          <button className="btn btn-sm" onClick={() => onMarkPaid(inv.id)}>{t("common.markPaid")}</button>
+                          <button className="btn btn-sm" onClick={() => onMarkPaid(inv.id)}>
+                            {t("common.markPaid")}
+                          </button>
                         ) : (
-                          <button className="btn btn-sm btn-ghost" onClick={() => onMarkOpen(inv.id)}>{t("invoiceList.resetToOpen")}</button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => onMarkOpen(inv.id)}>
+                            {t("invoiceList.resetToOpen")}
+                          </button>
                         )}
-                        <button className="btn btn-sm btn-ghost" onClick={() => onView(inv.id)}>{t("common.view")}</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => onView(inv.id)}>
+                          {t("common.view")}
+                        </button>
                       </div>
                     </td>
                   </tr>

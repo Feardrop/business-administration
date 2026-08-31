@@ -30,8 +30,18 @@ export default function Sidebar({ tab, onTab, businessName }) {
         })}
       </div>
       <div className="lang-switch" aria-label={t("nav.language")}>
-        <button className={`btn btn-sm ${lang === "de" ? "btn-primary" : "btn-ghost"}`} onClick={() => i18n.changeLanguage("de")}>DE</button>
-        <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-ghost"}`} onClick={() => i18n.changeLanguage("en")}>EN</button>
+        <button
+          className={`btn btn-sm ${lang === "de" ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => i18n.changeLanguage("de")}
+        >
+          DE
+        </button>
+        <button
+          className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => i18n.changeLanguage("en")}
+        >
+          EN
+        </button>
       </div>
       <div className="sidebar-foot">{t("nav.footer")}</div>
     </div>

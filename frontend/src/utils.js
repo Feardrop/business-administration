@@ -1,8 +1,6 @@
 // Canonical keys, stored as-is in the DB (see expenses.categories in the i18n
 // locale files for display labels) — translate the label, never the key.
-export const EXPENSE_CATEGORIES = [
-  "equipment", "software", "travel", "insurance", "rent", "training", "other",
-];
+export const EXPENSE_CATEGORIES = ["equipment", "software", "travel", "insurance", "rent", "training", "other"];
 
 const LOCALE_BY_LANG = { de: "de-DE", en: "en-US" };
 
@@ -33,6 +31,6 @@ export function currentYear() {
 
 export function invoiceTotals(inv) {
   const net = (inv.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
-  const vat = inv.is_kleinunternehmer ? 0 : net * (Number(inv.vat_rate) || 0) / 100;
+  const vat = inv.is_kleinunternehmer ? 0 : (net * (Number(inv.vat_rate) || 0)) / 100;
   return { net, vat, gross: net + vat };
 }

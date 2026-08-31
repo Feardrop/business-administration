@@ -12,6 +12,7 @@ database by hand:
 
 See /AGENTS.md for the full workflow.
 """
+
 import datetime as dt
 
 from sqlalchemy import (
@@ -62,8 +63,10 @@ class Invoice(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
     items = relationship(
-        "InvoiceItem", back_populates="invoice",
-        cascade="all, delete-orphan", order_by="InvoiceItem.id",
+        "InvoiceItem",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="InvoiceItem.id",
     )
 
 

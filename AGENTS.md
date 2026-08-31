@@ -33,6 +33,8 @@ backend/
     crud.py             DB access functions used by the routers
     routers/            one file per resource (settings, invoices, expenses)
   alembic/               migrations — see "Changing the schema" below
+  tests/                   pytest suite — see "Testing" below
+  requirements-dev.txt       pytest/ruff/mypy/pre-commit, kept out of the runtime image
   entrypoint.sh          runs `alembic upgrade head` then starts uvicorn
 frontend/
   src/
@@ -43,8 +45,18 @@ frontend/
     pages/                    Dashboard, InvoiceList, InvoiceForm, InvoiceDetail, Expenses, SettingsPage
     components/               Sidebar (incl. language switch), Icons
     styles.css                 all styling — plain CSS with custom properties, no framework
+    *.test.js(x) / *.slow.test.jsx   Vitest — see "Testing" below
+  eslint.config.js, .prettierrc.json   frontend lint/format config
 backup/
   backup.sh, restore.sh   sqlite snapshot + rclone-to-pCloud upload/restore
+.github/
+  workflows/ci.yaml            lint/format/fast-tests + slow-tests + branch-policy + docker-build
+  workflows/cd.yaml            tag + GitHub Release + GHCR image + post-release branch/PR, on merge to main
+  scripts/extract_changelog_section.py   pulls one version's notes out of CHANGELOG.md for cd.yaml
+pyproject.toml             ruff/mypy/pytest config (tool config only — not a packaged project)
+.pre-commit-config.yaml      the lint/format/test suite CI and local commits both run
+VERSION                       plain `X.Y.Z`, bumped on a release/* branch — see "Branching and releasing"
+CHANGELOG.md                Keep a Changelog — add entries under [Unreleased] in the same PR as the change
 Dockerfile                multi-stage: node builds frontend, python:3.12-slim runs the app
 docker-compose.yml          single service, mounts ./data for the sqlite file
 ```
@@ -55,7 +67,7 @@ Backend:
 ```
 cd backend
 python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 export DATABASE_URL=sqlite:///./local.db
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
@@ -68,6 +80,44 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Branching and releasing
+
+Three-tier flow: `development` (integration, and the repo's default
+branch) → `release/vX.Y.Z` (cut from `development`; carries only the
+version bump and changelog cutover) → `main` (released only).
+
+- **Day-to-day work** branches off `development` and PRs back into it.
+- **Cutting a release**: branch `release/vX.Y.Z` from `development`,
+  bump the version in `VERSION` (a plain `X.Y.Z`, no `v` prefix — it's
+  the single source of truth `.github/workflows/cd.yaml` reads), and
+  turn `CHANGELOG.md`'s `## [Unreleased]` section into `## [X.Y.Z] -
+  YYYY-MM-DD` (Keep a Changelog format) with a fresh empty `##
+  [Unreleased]` above it. PR `release/vX.Y.Z` into `main`.
+  `.github/workflows/ci.yaml`'s `branch-policy` job fails any PR into
+  `main` whose source branch isn't `release/*`.
+- **On merge to `main`**, `.github/workflows/cd.yaml` fires once CI is
+  green on that push (via a `workflow_run` trigger — a release PR's own
+  CI run, which happens on its `release/*` head branch, doesn't trigger
+  it; only the merge itself does). It's a no-op unless `VERSION`'s value
+  has no matching `vX.Y.Z` tag yet, in which case it: tags the commit,
+  extracts that version's `CHANGELOG.md` section (via
+  `.github/scripts/extract_changelog_section.py`) as GitHub Release
+  notes, builds and pushes a Docker image to
+  `ghcr.io/feardrop/business-administration` tagged both `vX.Y.Z` and
+  `latest`, and opens a `post-release/vX.Y.Z` branch + PR back into
+  `development` — see below.
+- **Post-release sync**: that PR exists so `main`'s post-release state
+  (the version bump, the changelog cutover, and anything else that
+  landed directly on `main`) flows back into `development` through
+  review, the same as any other change, rather than a silent direct
+  merge. Merge it promptly so `development` doesn't drift from `main`.
+
+Nothing about the version number or changelog content is generated
+automatically — bumping `VERSION` and writing the changelog entry are
+manual steps taken on the `release/vX.Y.Z` branch, same as the sibling
+`databricks-web-app` repo's release model (see its README if you want
+the fuller rationale).
 
 ## Changing the database schema
 
@@ -130,14 +180,71 @@ enough to pick up new migrations in production — no manual DB step.
   the home network / VPN. If you add auth, it belongs in
   `backend/app/main.py` as middleware, not scattered per-router.
 
+## Tooling and pre-commit
+
+One-time setup after installing `backend/requirements-dev.txt`:
+```
+pre-commit install                        # fast checks on every commit
+pre-commit install --hook-types pre-push  # + slow tests before push
+```
+
+`.pre-commit-config.yaml` is the single source of truth for lint/format/
+test commands — `.github/workflows/ci.yaml` runs the exact same config
+(`pre-commit run --all-files`), so a clean local run means CI will pass.
+It covers, in order: standard hygiene hooks, `ruff check --fix` +
+`ruff format` (backend lint/format — see `pyproject.toml`'s `[tool.ruff]`
+for the FastAPI-`Depends()` bugbear allowlist), `mypy` (backend
+type-check; two `type: ignore[assignment]` lines in `crud.py` are a
+known false-positive from `models.py`'s legacy `Column()` declarative
+style, not real bugs — see the comments there before adding the
+`sqlalchemy` mypy plugin to try to remove them, which trades this for
+noisier `relationship()`-inference errors on that style), `eslint` +
+`prettier --check` (frontend, via the project's own `npm run
+lint`/`format:check` rather than pre-commit's node-language support, so
+it reuses `frontend/node_modules` instead of provisioning a second node
+env), then the fast test suites. Slow tests
+(`backend-slow-tests`/`frontend-slow-tests`) only run at the `pre-push`
+stage and in CI's separate `slow-tests` job — see "Testing" below for
+what "slow" means here. A `pre-commit-update` hook checks (dry-run only,
+never auto-applies) whether any pinned hook is behind its latest
+release; it's `stages: [manual]` so it never slows down a commit, and
+CI's `pre-commit-update` job runs it explicitly.
+
 ## Testing
 
-No automated tests exist yet. If you add backend tests, use `pytest`
-with a throwaway SQLite DB (see how `backend/app/database.py` reads
-`DATABASE_URL` — point it at `sqlite:///:memory:` or a temp file in
-fixtures). Manually verify by running the app and hitting the flows in
-the browser before considering a change done — there's no CI here to
-catch regressions.
+**Backend** — `pytest`, configured in the root `pyproject.toml`
+(`testpaths = ["backend/tests"]`, `pythonpath = ["backend"]`, so `pytest`
+works from the repo root with no extra setup). `backend/tests/conftest.py`
+points `DATABASE_URL` at a temp-file SQLite DB *before* importing any
+`app.*` module — `app/database.py` builds its engine at import time from
+that env var, so the ordering matters; read the docstring there before
+adding fixtures. Use `@pytest.mark.slow` for anything that shouldn't
+run on every commit (the marker is registered in `pyproject.toml`):
+```
+pytest -m "not slow"   # fast — what pre-commit and CI's pre-commit job run
+pytest -m slow         # slow — what pre-push and CI's slow-tests job run
+pytest                 # everything
+```
+
+**Frontend** — Vitest. Fast tests live in `*.test.js(x)`; slow ones in
+`*.slow.test.jsx` (see `frontend/package.json`'s `test`/`test:slow`
+scripts, which filter by that naming convention since Vitest has no
+pytest-style marker system).
+```
+npm test        # fast
+npm run test:slow
+```
+
+`backend/tests/test_smoke.py` and `frontend/src/utils.test.js` /
+`App.slow.test.jsx` are deliberately minimal — they exist to give the
+fast/slow split something real to run, not as coverage. Comprehensive
+coverage (Decimal handling, the `is_kleinunternehmer`/`vat_rate`
+snapshot behavior, invoice-numbering edge cases, etc.) is tracked
+separately; check the GitHub issues before assuming a behavior is
+untested just because it isn't covered yet.
+
+Manually verify UI changes by running the app and hitting the flows in
+the browser too — the test suite is not a substitute for that.
 
 ## Multi-agent implementation workflow
 
@@ -169,11 +276,15 @@ issue should follow.
 **Branching and stacking:**
 
 - Branch name: `issue-<N>-<short-slug>`, e.g. `issue-25-draft-invoices`.
-- Base it on `main` unless the issue is explicitly a follow-on to
-  another still-open issue's branch (the roadmap and dependency
-  comments say when this applies — e.g. #26 cancellation logically
-  stacks on #25 drafts). In that case, branch from the prerequisite's
-  branch, not from `main`, and say so in the PR ("Stacked on #<PR>").
+- Base it on `development` (the default branch — see "Branching and
+  releasing" above) and PR back into `development`, unless the issue is
+  explicitly a follow-on to another still-open issue's branch (the
+  roadmap and dependency comments say when this applies — e.g. #26
+  cancellation logically stacks on #25 drafts). In that case, branch
+  from the prerequisite's branch, not from `development`, and say so in
+  the PR ("Stacked on #<PR>"). Never branch an issue implementation from
+  `main` or target `main` directly — `main` only receives merges from
+  `release/*` branches.
 - Keep each PR scoped to one issue. If an issue is large enough that its
   own plan comment breaks it into phases, one PR per phase is fine —
   stack them in order, same convention.
@@ -187,14 +298,15 @@ issue should follow.
 Every implementation PR commits the failing test *before* the commit
 that makes it pass — two separate commits minimum, in that order, so
 the history itself shows red-then-green. This isn't a style preference:
-#17 (establishing the test suite) is deliberately the first issue in
-the roadmap's Phase 0 precisely because most of what follows touches
-money, invoice numbering, or tax-law correctness, and that class of bug
-is exactly what a regression suite exists to catch. Until #17 lands,
-new backend tests still go through `pytest` against a throwaway SQLite
-DB (see `database.py`'s `DATABASE_URL` handling) and new frontend tests
-through Vitest once added — don't skip writing them just because the
-harness isn't wired into CI yet (#18).
+#17 (establishing a *comprehensive* test suite) is deliberately the
+first issue in the roadmap's Phase 0 precisely because most of what
+follows touches money, invoice numbering, or tax-law correctness, and
+that class of bug is exactly what a regression suite exists to catch.
+The fast/slow pytest + Vitest harness, `pre-commit`, and `ci.yaml`
+already exist (see "Tooling and pre-commit" and "Testing" above) — #17
+is about filling that harness with real coverage, not building it from
+scratch. New tests go in `backend/tests/` or alongside the frontend
+source per the conventions there; CI enforces they keep passing.
 
 **Model routing for implementation agents:**
 

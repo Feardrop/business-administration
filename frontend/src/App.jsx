@@ -99,13 +99,18 @@ export default function App() {
       <Sidebar tab={tab} onTab={goTab} businessName={settings.business_name} />
       <div className="main">
         <div className="main-inner">
-          {tab === "dashboard" && <Dashboard settings={settings} invoices={invoices} expenses={expenses} onTab={goTab} />}
+          {tab === "dashboard" && (
+            <Dashboard settings={settings} invoices={invoices} expenses={expenses} onTab={goTab} />
+          )}
 
           {tab === "invoices" && (
             <InvoiceList
               invoices={invoices}
               onNew={() => setTab("invoiceNew")}
-              onView={(id) => { setInvoiceViewId(id); setTab("invoiceDetail"); }}
+              onView={(id) => {
+                setInvoiceViewId(id);
+                setTab("invoiceDetail");
+              }}
               onMarkPaid={handleMarkPaid}
               onMarkOpen={handleMarkOpen}
             />

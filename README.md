@@ -8,11 +8,29 @@ Ersetzt keine Steuerberatung.
 
 ## Schnellstart (Docker)
 
+**Option A — aus dem Quellcode bauen:**
 ```bash
 git clone <dieses-repo> gewerbe-verwaltung
 cd gewerbe-verwaltung
 docker compose up -d --build
 ```
+
+**Option B — vorgefertigtes Image von GHCR:**
+
+Jede Version ab `v0.1.0` wird beim Release automatisch nach
+`ghcr.io/feardrop/business-administration` gepusht (Tags `vX.Y.Z` und
+`latest`) — siehe `.github/workflows/cd.yaml`. Solange das Repo privat
+ist, ist auch das Image privat; einmalig einloggen mit einem
+[Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+mit `read:packages`-Scope:
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <dein-github-user> --password-stdin
+docker pull ghcr.io/feardrop/business-administration:latest
+```
+Dann `docker-compose.yml`s `build: .` durch `image:
+ghcr.io/feardrop/business-administration:latest` ersetzen (oder eine
+eigene Compose-Datei ohne Build-Schritt verwenden) und `docker compose
+up -d` starten — ohne lokalen Checkout und ohne Build.
 
 Danach im Browser: `http://<heimserver-ip>:8000`
 
@@ -113,5 +131,6 @@ automatisch beim Start in diesem Verzeichnis.
 | Backend | FastAPI, SQLAlchemy 2.x |
 | Datenbank | SQLite (Datei unter `/data/app.db`) |
 | Migrationen | Alembic |
-| Deployment | ein Docker-Image, Multi-Stage-Build |
+| Deployment | ein Docker-Image, Multi-Stage-Build, auf GHCR veröffentlicht |
+| CI/CD | GitHub Actions — `ci.yaml` (Lint/Format/Tests), `cd.yaml` (Release) |
 | Backup | rclone → pCloud |

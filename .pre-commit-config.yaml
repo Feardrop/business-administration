@@ -1,0 +1,95 @@
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # --- Backend: lint + format (ruff) and type-check (mypy) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [sqlalchemy==2.0.35, pydantic==2.9.2]
+        pass_filenames: false
+
+  # --- Frontend: lint + format, run through the project's own tooling
+  # rather than pre-commit's node-language support, so it reuses the
+  # existing eslint/prettier/vitest config and node_modules instead of
+  # provisioning a second, separate node environment. ---
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: frontend eslint
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/.*\.(js|jsx)$
+        pass_filenames: false
+
+      - id: frontend-format
+        name: frontend prettier --check
+        entry: bash -c 'cd frontend && npm run format:check'
+        language: system
+        files: ^frontend/.*\.(js|jsx|json|css|html)$
+        pass_filenames: false
+
+      # --- Fast tests, on every commit ---
+      - id: backend-fast-tests
+        name: backend pytest (fast)
+        entry: bash -c 'cd backend && python -m pytest ../backend/tests -m "not slow"'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+      - id: frontend-fast-tests
+        name: frontend vitest (fast)
+        entry: bash -c 'cd frontend && npm test'
+        language: system
+        files: ^frontend/.*\.(js|jsx)$
+        pass_filenames: false
+
+  # --- Slow tests, only at push time (see AGENTS.md / README for the
+  # `pre-commit run --hook-stage pre-push` convention this mirrors from
+  # the sibling databricks-web-app repo) ---
+  - repo: local
+    hooks:
+      - id: backend-slow-tests
+        name: backend pytest (slow)
+        entry: bash -c 'cd backend && python -m pytest ../backend/tests -m "slow"'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: frontend-slow-tests
+        name: frontend vitest (slow)
+        entry: bash -c 'cd frontend && npm run test:slow'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # --- Keep the hooks above from going stale (dry-run only; never
+  # auto-applies an update on commit) ---
+  - repo: https://gitlab.com/vojko.pribudic.foss/pre-commit-update
+    rev: v0.9.0
+    hooks:
+      - id: pre-commit-update
+        # --dry-run defaults to "strict" mode: exits non-zero if any hook
+        # has a newer rev available, without writing changes to this file.
+        args: [--dry-run]
+        stages: [manual]

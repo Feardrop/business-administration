@@ -17,7 +17,8 @@ export default function Expenses({ expenses, onCreate, onDelete }) {
     () => Array.from(new Set(expenses.map((e) => new Date(e.date).getFullYear()))).sort((a, b) => b - a),
     [expenses]
   );
-  const filtered = yearFilter === "all" ? expenses : expenses.filter((e) => String(new Date(e.date).getFullYear()) === yearFilter);
+  const filtered =
+    yearFilter === "all" ? expenses : expenses.filter((e) => String(new Date(e.date).getFullYear()) === yearFilter);
   const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
   const sum = sorted.reduce((s, e) => s + Number(e.amount || 0), 0);
 
@@ -31,44 +32,98 @@ export default function Expenses({ expenses, onCreate, onDelete }) {
   return (
     <>
       <div className="page-head">
-        <div><h2>{t("expenses.title")}</h2><p>{t("expenses.summary", { count: sorted.length, sum: fmtEUR(sum, lang) })}</p></div>
+        <div>
+          <h2>{t("expenses.title")}</h2>
+          <p>{t("expenses.summary", { count: sorted.length, sum: fmtEUR(sum, lang) })}</p>
+        </div>
       </div>
 
       <div className="card">
         <form onSubmit={handleSubmit}>
           <div className="field-row">
-            <div className="field"><label>{t("fields.date")}</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></div>
+            <div className="field">
+              <label>{t("fields.date")}</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
             <div className="field">
               <label>{t("fields.category")}</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{t(`expenses.categories.${c}`)}</option>)}
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {t(`expenses.categories.${c}`)}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
           <div className="field-row">
-            <div className="field"><label>{t("fields.description")}</label><input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("expenses.descriptionPlaceholder")} required /></div>
-            <div className="field"><label>{t("fields.amount")}</label><input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("expenses.amountPlaceholder")} required /></div>
+            <div className="field">
+              <label>{t("fields.description")}</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t("expenses.descriptionPlaceholder")}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>{t("fields.amount")}</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={t("expenses.amountPlaceholder")}
+                required
+              />
+            </div>
           </div>
-          <button type="submit" className="btn btn-primary"><IconPlus /> {t("expenses.submit")}</button>
+          <button type="submit" className="btn btn-primary">
+            <IconPlus /> {t("expenses.submit")}
+          </button>
         </form>
       </div>
 
       {years.length > 0 && (
         <div style={{ margin: "16px 0 10px", display: "flex", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{t("expenses.yearFilterLabel")}</span>
-          <button className={`btn btn-sm ${yearFilter === "all" ? "btn-primary" : ""}`} onClick={() => setYearFilter("all")}>{t("common.all")}</button>
+          <button
+            className={`btn btn-sm ${yearFilter === "all" ? "btn-primary" : ""}`}
+            onClick={() => setYearFilter("all")}
+          >
+            {t("common.all")}
+          </button>
           {years.map((y) => (
-            <button key={y} className={`btn btn-sm ${yearFilter === String(y) ? "btn-primary" : ""}`} onClick={() => setYearFilter(String(y))}>{y}</button>
+            <button
+              key={y}
+              className={`btn btn-sm ${yearFilter === String(y) ? "btn-primary" : ""}`}
+              onClick={() => setYearFilter(String(y))}
+            >
+              {y}
+            </button>
           ))}
         </div>
       )}
 
       {sorted.length === 0 ? (
-        <div className="card empty"><h3>{t("expenses.emptyTitle")}</h3><p>{t("expenses.emptyText")}</p></div>
+        <div className="card empty">
+          <h3>{t("expenses.emptyTitle")}</h3>
+          <p>{t("expenses.emptyText")}</p>
+        </div>
       ) : (
         <div className="card" style={{ padding: "8px 20px" }}>
           <table>
-            <thead><tr><th>{t("fields.date")}</th><th>{t("fields.category")}</th><th>{t("fields.description")}</th><th className="num">{t("fields.amount")}</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>{t("fields.date")}</th>
+                <th>{t("fields.category")}</th>
+                <th>{t("fields.description")}</th>
+                <th className="num">{t("fields.amount")}</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {sorted.map((e) => (
                 <tr key={e.id}>
@@ -79,12 +134,24 @@ export default function Expenses({ expenses, onCreate, onDelete }) {
                   <td>
                     {confirmId === e.id ? (
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-danger" onClick={() => { onDelete(e.id); setConfirmId(null); }}>{t("expenses.confirmDelete")}</button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(null)}>{t("common.no")}</button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => {
+                            onDelete(e.id);
+                            setConfirmId(null);
+                          }}
+                        >
+                          {t("expenses.confirmDelete")}
+                        </button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(null)}>
+                          {t("common.no")}
+                        </button>
                       </div>
                     ) : (
                       <div className="row-actions">
-                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(e.id)}><IconTrash /></button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setConfirmId(e.id)}>
+                          <IconTrash />
+                        </button>
                       </div>
                     )}
                   </td>
