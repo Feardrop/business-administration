@@ -41,13 +41,15 @@ export interface InvoiceItemInput {
 // comment / backend/app/models.py's Invoice docstring for the diagram):
 //   draft --issue--> offen --pay--> bezahlt
 //     |                 |
-//     +--delete         +--cancel--> storniert          (future issue #26)
+//     +--delete         +--cancel--> storniert                 (issue #26)
 //     offen --partial payment--> teilweise bezahlt --(pay rest)--> bezahlt
 //                                                                  (#30)
 //     teilweise bezahlt --cancel--> storniert                     (#26)
-// Only "draft" | "offen" | "bezahlt" are actually produced by this app
-// today — "teilweise bezahlt" and "storniert" are listed so the type
-// doesn't need another breaking change once #26/#30 land.
+// "draft" | "offen" | "bezahlt" | "storniert" are produced by this app
+// today. "teilweise bezahlt" is listed so the type doesn't need another
+// breaking change once #30 lands. "storniert" is terminal — reached only
+// via POST .../cancel[-and-correct], never by deleting or editing an
+// issued invoice (§14c UStG).
 export type InvoiceStatus = "draft" | "offen" | "teilweise bezahlt" | "bezahlt" | "storniert";
 
 export interface Invoice {
@@ -73,7 +75,25 @@ export interface Invoice {
   paid_date: string | null;
   issued_at: string | null;
   created_at: string;
+  // Set together with status "storniert" (issue #26). Null on an invoice
+  // that has never been cancelled.
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+  // Set only on a cancellation invoice itself: the invoice it cancels.
+  // Null everywhere else, including on the cancelled original.
+  cancels_invoice_id: number | null;
+  // The reverse link: set on the cancelled original once its cancellation
+  // invoice exists. Null otherwise, including on a cancellation invoice.
+  cancellation_invoice_id: number | null;
   items: InvoiceItem[];
+}
+
+// Response of POST /api/invoices/{id}/cancel-and-correct: the new
+// cancellation invoice, plus a fresh draft pre-filled from the original
+// for the user to correct and re-issue.
+export interface CancelAndCorrectResult {
+  cancellation: Invoice;
+  draft: Invoice;
 }
 
 export interface InvoiceCreateInput {

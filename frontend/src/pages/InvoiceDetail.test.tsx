@@ -40,6 +40,10 @@ const invoice: Invoice = {
   paid_date: null,
   issued_at: "2026-01-15",
   created_at: "2026-01-15T10:00:00",
+  cancelled_at: null,
+  cancel_reason: null,
+  cancels_invoice_id: null,
+  cancellation_invoice_id: null,
   items: [{ id: 1, description: "Shoot", qty: "1", price: "500", vat_rate: "19" }],
 };
 
@@ -48,6 +52,7 @@ describe("InvoiceDetail", () => {
     render(
       <InvoiceDetail
         invoice={null}
+        invoices={[]}
         settings={settings}
         onBack={vi.fn()}
         onEdit={vi.fn()}
@@ -55,6 +60,9 @@ describe("InvoiceDetail", () => {
         onMarkPaid={vi.fn()}
         onMarkOpen={vi.fn()}
         onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        onCancelAndCorrect={vi.fn()}
+        onViewInvoice={vi.fn()}
       />
     );
     expect(screen.getByText(/nicht gefunden/)).toBeInTheDocument();
@@ -64,6 +72,7 @@ describe("InvoiceDetail", () => {
     render(
       <InvoiceDetail
         invoice={invoice}
+        invoices={[invoice]}
         settings={settings}
         onBack={vi.fn()}
         onEdit={vi.fn()}
@@ -71,6 +80,9 @@ describe("InvoiceDetail", () => {
         onMarkPaid={vi.fn()}
         onMarkOpen={vi.fn()}
         onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        onCancelAndCorrect={vi.fn()}
+        onViewInvoice={vi.fn()}
       />
     );
     expect(screen.getByText(/Client A/)).toBeInTheDocument();

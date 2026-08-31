@@ -6,6 +6,10 @@ import type { Invoice, Settings } from "../types";
 
 interface InvoiceDetailProps {
   invoice: Invoice | null;
+  // Full invoice list, used only to resolve the number of a linked
+  // cancellation/cancelled invoice (see cancellationInvoice/cancelledInvoice
+  // below) -- the current invoice only carries the related invoice's id.
+  invoices: Invoice[];
   settings: Settings;
   onBack: () => void;
   onEdit: (id: number) => void;
@@ -13,6 +17,9 @@ interface InvoiceDetailProps {
   onMarkPaid: (id: number) => Promise<void>;
   onMarkOpen: (id: number) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onCancel: (id: number, reason: string) => Promise<void>;
+  onCancelAndCorrect: (id: number, reason: string) => Promise<void>;
+  onViewInvoice: (id: number) => void;
 }
 
 // The printable invoice document below (.invoice-doc) intentionally stays in
@@ -23,6 +30,7 @@ interface InvoiceDetailProps {
 // it's part of the same printable surface.
 export default function InvoiceDetail({
   invoice,
+  invoices,
   settings,
   onBack,
   onEdit,
@@ -30,9 +38,18 @@ export default function InvoiceDetail({
   onMarkPaid,
   onMarkOpen,
   onDelete,
+  onCancel,
+  onCancelAndCorrect,
+  onViewInvoice,
 }: InvoiceDetailProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // "cancel" / "cancelAndCorrect" show the reason-entry step for that
+  // action; "none" hides it. Kept as one piece of state since only one of
+  // the two can be in progress at a time.
+  const [cancelMode, setCancelMode] = useState<"none" | "cancel" | "cancelAndCorrect">("none");
+  const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   if (!invoice)
@@ -45,11 +62,39 @@ export default function InvoiceDetail({
       </p>
     );
   const isDraft = invoice.status === "draft";
+  // Only an already-issued, not-yet-cancelled invoice can be cancelled
+  // (issue #26) -- a draft is just deleted, and "storniert" is terminal.
+  const isCancellable = invoice.status === "offen" || invoice.status === "bezahlt";
+  const cancellationInvoice = invoice.cancellation_invoice_id
+    ? invoices.find((i) => i.id === invoice.cancellation_invoice_id) || null
+    : null;
+  const cancelledInvoice = invoice.cancels_invoice_id
+    ? invoices.find((i) => i.id === invoice.cancels_invoice_id) || null
+    : null;
   const total = invoiceTotals({
     ...invoice,
     is_kleinunternehmer: invoice.is_kleinunternehmer ?? settings.kleinunternehmer,
   });
   const s = settings;
+
+  function startCancel(mode: "cancel" | "cancelAndCorrect") {
+    setCancelMode(mode);
+    setCancelReason("");
+    setError("");
+  }
+
+  async function confirmCancel() {
+    if (!invoice) return;
+    await withErrorHandling(async () => {
+      if (cancelMode === "cancel") {
+        await onCancel(invoice.id, cancelReason);
+      } else if (cancelMode === "cancelAndCorrect") {
+        await onCancelAndCorrect(invoice.id, cancelReason);
+      }
+      setCancelMode("none");
+      setCancelReason("");
+    });
+  }
 
   async function withErrorHandling(action: () => Promise<void>) {
     setError("");
@@ -106,9 +151,72 @@ export default function InvoiceDetail({
               <IconTrash /> {t("common.delete")}
             </button>
           )}
+          {isCancellable && (
+            <>
+              <button className="btn btn-sm btn-danger" onClick={() => startCancel("cancel")} disabled={busy}>
+                {t("invoiceDetail.cancelInvoice")}
+              </button>
+              <button className="btn btn-sm btn-danger" onClick={() => startCancel("cancelAndCorrect")} disabled={busy}>
+                {t("invoiceDetail.cancelAndCorrect")}
+              </button>
+            </>
+          )}
         </div>
       </div>
       {error && <div className="banner banner-amber no-print">{error}</div>}
+      {invoice.status === "storniert" && (
+        <div className="banner banner-amber no-print">
+          <div>{t("invoiceDetail.cancelledBanner", { date: fmtDate(invoice.cancelled_at, lang) })}</div>
+          {invoice.cancel_reason && (
+            <div>
+              {t("invoiceDetail.cancelReasonLabel")}: {invoice.cancel_reason}
+            </div>
+          )}
+          {cancellationInvoice && (
+            <div style={{ marginTop: 6 }}>
+              <button className="btn btn-sm btn-ghost" onClick={() => onViewInvoice(cancellationInvoice.id)}>
+                {t("invoiceDetail.viewCancellationInvoice", { number: cancellationInvoice.number })}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {cancelledInvoice && (
+        <div className="banner no-print">
+          {t("invoiceDetail.cancelsInvoiceNote", { number: cancelledInvoice.number })}{" "}
+          <button className="btn btn-sm btn-ghost" onClick={() => onViewInvoice(cancelledInvoice.id)}>
+            {t("common.view")}
+          </button>
+        </div>
+      )}
+      {cancelMode !== "none" && (
+        <div className="banner banner-amber no-print">
+          <div>
+            {cancelMode === "cancel" ? t("invoiceDetail.cancelPrompt") : t("invoiceDetail.cancelAndCorrectPrompt")}
+          </div>
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder={t("invoiceDetail.cancelReasonPlaceholder")}
+            rows={2}
+            style={{ width: "100%", marginTop: 8 }}
+          />
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            <button className="btn btn-sm btn-danger" disabled={busy || !cancelReason.trim()} onClick={confirmCancel}>
+              {t("invoiceDetail.confirmCancel")}
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setCancelMode("none");
+                setCancelReason("");
+              }}
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
       {confirmDelete && (
         <div className="banner banner-amber no-print">
           {t("invoiceDetail.confirmDeleteText")}

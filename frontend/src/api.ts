@@ -1,4 +1,5 @@
 import type {
+  CancelAndCorrectResult,
   Expense,
   ExpenseCreateInput,
   ExpenseUpdateInput,
@@ -69,6 +70,16 @@ export const api = {
   markInvoicePaid: (id: number) => request<Invoice>(`/invoices/${id}/mark-paid`, { method: "POST" }),
   markInvoiceOpen: (id: number) => request<Invoice>(`/invoices/${id}/mark-open`, { method: "POST" }),
   deleteInvoice: (id: number) => request<null>(`/invoices/${id}`, { method: "DELETE" }),
+  // §14c UStG: an issued invoice can't be deleted or silently corrected --
+  // it's reversed with a formal, separately-numbered cancellation invoice
+  // (Stornorechnung) instead. See issue #26.
+  cancelInvoice: (id: number, reason: string) =>
+    request<Invoice>(`/invoices/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  cancelAndCorrectInvoice: (id: number, reason: string) =>
+    request<CancelAndCorrectResult>(`/invoices/${id}/cancel-and-correct`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
 
   listExpenses: (year?: number | string) => request<Expense[]>(`/expenses${year ? `?year=${year}` : ""}`),
   createExpense: (data: ExpenseCreateInput) =>

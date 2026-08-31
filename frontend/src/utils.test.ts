@@ -138,7 +138,12 @@ describe("computeInvoiceStats", () => {
   it("still counts an unrelated open invoice alongside an excluded cancelled one", () => {
     const stats = computeInvoiceStats(
       [
-        { status: "storniert", paid_date: null, is_kleinunternehmer: false, items: [{ qty: 1, price: 999, vat_rate: 19 }] },
+        {
+          status: "storniert",
+          paid_date: null,
+          is_kleinunternehmer: false,
+          items: [{ qty: 1, price: 999, vat_rate: 19 }],
+        },
         { status: "offen", paid_date: null, is_kleinunternehmer: false, items: [{ qty: 1, price: 50, vat_rate: 19 }] },
       ],
       2026

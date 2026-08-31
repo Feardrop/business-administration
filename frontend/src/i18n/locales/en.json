@@ -71,6 +71,7 @@
     "statusPaid": "paid",
     "statusOpen": "open",
     "statusDraft": "Draft",
+    "statusCancelled": "cancelled",
     "numberPending": "–"
   },
   "invoiceForm": {
@@ -114,7 +115,17 @@
     "markOpen": "Mark as open",
     "print": "Print / save as PDF",
     "confirmDeleteText": "Really delete this invoice?",
-    "confirmDeleteYes": "Yes, delete"
+    "confirmDeleteYes": "Yes, delete",
+    "cancelInvoice": "Cancel invoice",
+    "cancelAndCorrect": "Cancel & correct",
+    "cancelPrompt": "Why should this invoice be cancelled? A cancellation invoice with its own invoice number will be created.",
+    "cancelAndCorrectPrompt": "Why should this invoice be cancelled? A cancellation invoice will be created, plus an editable draft for the corrected replacement.",
+    "cancelReasonPlaceholder": "Reason for cancellation, e.g. wrong amount or wrong client",
+    "confirmCancel": "Create cancellation invoice",
+    "cancelledBanner": "This invoice was cancelled on {{date}}.",
+    "cancelReasonLabel": "Reason for cancellation",
+    "viewCancellationInvoice": "View cancellation invoice {{number}}",
+    "cancelsInvoiceNote": "This cancellation invoice cancels invoice {{number}}."
   },
   "expenses": {
     "title": "Expenses",

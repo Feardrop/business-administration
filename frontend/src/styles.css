@@ -390,6 +390,10 @@ th.num {
   color: var(--ink-soft);
   border: 1px dashed var(--line-strong);
 }
+.badge-cancelled {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 
 .empty {
   padding: 30px 10px;

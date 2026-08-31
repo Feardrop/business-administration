@@ -71,6 +71,7 @@
     "statusPaid": "bezahlt",
     "statusOpen": "offen",
     "statusDraft": "Entwurf",
+    "statusCancelled": "storniert",
     "numberPending": "–"
   },
   "invoiceForm": {
@@ -114,7 +115,17 @@
     "markOpen": "Als offen markieren",
     "print": "Drucken / als PDF speichern",
     "confirmDeleteText": "Diese Rechnung wirklich löschen?",
-    "confirmDeleteYes": "Ja, löschen"
+    "confirmDeleteYes": "Ja, löschen",
+    "cancelInvoice": "Stornieren",
+    "cancelAndCorrect": "Stornieren & korrigieren",
+    "cancelPrompt": "Warum soll diese Rechnung storniert werden? Es wird eine Stornorechnung mit eigener Rechnungsnummer erstellt.",
+    "cancelAndCorrectPrompt": "Warum soll diese Rechnung storniert werden? Es wird eine Stornorechnung erstellt und zusätzlich ein korrigierbarer Entwurf für die neue Rechnung angelegt.",
+    "cancelReasonPlaceholder": "Stornogrund, z. B. falscher Betrag oder falscher Kunde",
+    "confirmCancel": "Stornorechnung erstellen",
+    "cancelledBanner": "Diese Rechnung wurde am {{date}} storniert.",
+    "cancelReasonLabel": "Stornogrund",
+    "viewCancellationInvoice": "Stornorechnung {{number}} ansehen",
+    "cancelsInvoiceNote": "Diese Stornorechnung storniert Rechnung {{number}}."
   },
   "expenses": {
     "title": "Ausgaben",

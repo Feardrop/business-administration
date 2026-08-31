@@ -101,6 +101,20 @@ export default function App() {
     await refreshInvoices();
     setTab("invoices");
   }
+  async function handleCancelInvoice(id: number, reason: string) {
+    const cancellation = await api.cancelInvoice(id, reason);
+    await refreshInvoices();
+    // Jump straight to the new cancellation invoice -- it's the real
+    // outcome of this action, not the (now storniert) original.
+    setInvoiceViewId(cancellation.id);
+  }
+  async function handleCancelAndCorrectInvoice(id: number, reason: string) {
+    const result = await api.cancelAndCorrectInvoice(id, reason);
+    await refreshInvoices();
+    // Land the user directly on the corrected draft, ready to edit.
+    setEditingInvoiceId(result.draft.id);
+    setTab("invoiceNew");
+  }
   async function handleCreateExpense(payload: ExpenseCreateInput) {
     await api.createExpense(payload);
     await refreshExpenses();
@@ -177,6 +191,7 @@ export default function App() {
           {tab === "invoiceDetail" && (
             <InvoiceDetail
               invoice={currentInvoice}
+              invoices={invoices}
               settings={settings}
               onBack={() => setTab("invoices")}
               onEdit={goEditInvoice}
@@ -184,6 +199,9 @@ export default function App() {
               onMarkPaid={handleMarkPaid}
               onMarkOpen={handleMarkOpen}
               onDelete={handleDeleteInvoice}
+              onCancel={handleCancelInvoice}
+              onCancelAndCorrect={handleCancelAndCorrectInvoice}
+              onViewInvoice={(id) => setInvoiceViewId(id)}
             />
           )}
 

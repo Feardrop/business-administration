@@ -80,6 +80,9 @@ export default function InvoiceList({
                       {inv.status === "offen" && (
                         <span className="badge badge-open">{t("invoiceList.statusOpen")}</span>
                       )}
+                      {inv.status === "storniert" && (
+                        <span className="badge badge-cancelled">{t("invoiceList.statusCancelled")}</span>
+                      )}
                     </td>
                     <td>
                       <div className="row-actions">
