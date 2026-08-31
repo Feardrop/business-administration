@@ -48,6 +48,11 @@ here relates to the `release/vX.Y.Z` branch workflow.
   (`webidl.util.markAsUncloneable is not a function`). The Dockerfile's
   separate `node:20-alpine` frontend-build stage is unaffected since it
   never imports jsdom.
+- `ci.yaml`: widened the `pull_request.branches` trigger filter to also
+  match `issue-*` — a stacked PR (see AGENTS.md's multi-agent workflow)
+  targets another open issue branch as its base rather than
+  `development`/`release/*`/`main` directly, and previously got zero CI
+  checks as a result.
 
 ## [0.1.0] - 2026-08-28
 
