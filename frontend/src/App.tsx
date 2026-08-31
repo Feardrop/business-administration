@@ -9,8 +9,9 @@ import InvoiceForm from "./pages/InvoiceForm";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Expenses from "./pages/Expenses";
 import SettingsPage from "./pages/SettingsPage";
+import type { Expense, ExpenseCreateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
 
-function nextInvoiceNumber(settings, invoices) {
+function nextInvoiceNumber(settings: Settings, invoices: Invoice[]): string {
   const year = new Date().getFullYear();
   const prefix = settings.invoice_prefix ? `${settings.invoice_prefix}-` : "";
   const count = invoices.filter((i) => i.number && i.number.includes(String(year))).length;
@@ -20,11 +21,11 @@ function nextInvoiceNumber(settings, invoices) {
 export default function App() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState(null);
-  const [invoices, setInvoices] = useState([]);
-  const [expenses, setExpenses] = useState([]);
-  const [tab, setTab] = useState("dashboard");
-  const [invoiceViewId, setInvoiceViewId] = useState(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [tab, setTab] = useState<Tab>("dashboard");
+  const [invoiceViewId, setInvoiceViewId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -56,39 +57,39 @@ export default function App() {
     setExpenses(await api.listExpenses());
   }
 
-  async function handleCreateInvoice(payload) {
+  async function handleCreateInvoice(payload: InvoiceCreateInput) {
     const created = await api.createInvoice(payload);
     await refreshInvoices();
     setInvoiceViewId(created.id);
     setTab("invoiceDetail");
   }
-  async function handleMarkPaid(id) {
+  async function handleMarkPaid(id: number) {
     await api.markInvoicePaid(id);
     await refreshInvoices();
   }
-  async function handleMarkOpen(id) {
+  async function handleMarkOpen(id: number) {
     await api.markInvoiceOpen(id);
     await refreshInvoices();
   }
-  async function handleDeleteInvoice(id) {
+  async function handleDeleteInvoice(id: number) {
     await api.deleteInvoice(id);
     await refreshInvoices();
     setTab("invoices");
   }
-  async function handleCreateExpense(payload) {
+  async function handleCreateExpense(payload: ExpenseCreateInput) {
     await api.createExpense(payload);
     await refreshExpenses();
   }
-  async function handleDeleteExpense(id) {
+  async function handleDeleteExpense(id: number) {
     await api.deleteExpense(id);
     await refreshExpenses();
   }
-  async function handleSaveSettings(data) {
+  async function handleSaveSettings(data: Settings) {
     const saved = await api.saveSettings(data);
     setSettings(saved);
   }
 
-  function goTab(next) {
+  function goTab(next: Tab) {
     setTab(next);
   }
 

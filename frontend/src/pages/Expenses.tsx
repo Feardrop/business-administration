@@ -1,17 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { EXPENSE_CATEGORIES, fmtDate, fmtEUR, todayISO } from "../utils";
+import { EXPENSE_CATEGORIES, fmtDate, fmtEUR, todayISO, type ExpenseCategory } from "../utils";
 import { IconPlus, IconTrash } from "../components/Icons";
+import type { Expense, ExpenseCreateInput } from "../types";
 
-export default function Expenses({ expenses, onCreate, onDelete }) {
+interface ExpensesProps {
+  expenses: Expense[];
+  onCreate: (payload: ExpenseCreateInput) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
+}
+
+export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const [date, setDate] = useState(todayISO());
-  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [category, setCategory] = useState<ExpenseCategory>(EXPENSE_CATEGORIES[0]);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [yearFilter, setYearFilter] = useState("all");
-  const [confirmId, setConfirmId] = useState(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
 
   const years = useMemo(
     () => Array.from(new Set(expenses.map((e) => new Date(e.date).getFullYear()))).sort((a, b) => b - a),
@@ -22,7 +29,7 @@ export default function Expenses({ expenses, onCreate, onDelete }) {
   const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
   const sum = sorted.reduce((s, e) => s + Number(e.amount || 0), 0);
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     await onCreate({ date, category, description, amount: Number(amount) || 0 });
     setDescription("");
@@ -47,7 +54,7 @@ export default function Expenses({ expenses, onCreate, onDelete }) {
             </div>
             <div className="field">
               <label>{t("fields.category")}</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)}>
                 {EXPENSE_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {t(`expenses.categories.${c}`)}

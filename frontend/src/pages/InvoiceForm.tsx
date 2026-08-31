@@ -1,33 +1,47 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { fmtEUR, todayISO } from "../utils";
 import { IconBack, IconPlus } from "../components/Icons";
+import type { InvoiceCreateInput, Settings } from "../types";
 
-export default function InvoiceForm({ settings, nextNumber, onCancel, onSubmit }) {
+interface InvoiceFormProps {
+  settings: Settings;
+  nextNumber: string;
+  onCancel: () => void;
+  onSubmit: (payload: InvoiceCreateInput) => Promise<void>;
+}
+
+interface FormItem {
+  desc: string;
+  qty: number | string;
+  price: number | string;
+}
+
+export default function InvoiceForm({ settings, nextNumber, onCancel, onSubmit }: InvoiceFormProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const [date, setDate] = useState(todayISO());
   const [clientName, setClientName] = useState("");
   const [clientAddress, setClientAddress] = useState("");
   const [note, setNote] = useState("");
-  const [vatRate, setVatRate] = useState(19);
-  const [items, setItems] = useState([{ desc: "", qty: 1, price: 0 }]);
+  const [vatRate, setVatRate] = useState("19");
+  const [items, setItems] = useState<FormItem[]>([{ desc: "", qty: 1, price: 0 }]);
   const [error, setError] = useState("");
 
   const net = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
   const vat = settings.kleinunternehmer ? 0 : (net * Number(vatRate)) / 100;
 
-  function updateItem(idx, field, value) {
+  function updateItem<K extends keyof FormItem>(idx: number, field: K, value: FormItem[K]) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   }
   function addItem() {
     setItems((prev) => [...prev, { desc: "", qty: 1, price: 0 }]);
   }
-  function removeItem(idx) {
+  function removeItem(idx: number) {
     setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     const cleanItems = items
@@ -47,7 +61,7 @@ export default function InvoiceForm({ settings, nextNumber, onCancel, onSubmit }
         items: cleanItems,
       });
     } catch (err) {
-      setError(err.message || t("invoiceForm.saveError"));
+      setError(err instanceof Error ? err.message : t("invoiceForm.saveError"));
     }
   }
 

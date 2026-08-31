@@ -16,17 +16,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 # argument value — that's idiomatic here, not the bug B008 looks for.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
 
-[tool.mypy]
-python_version = "3.12"
-files = ["backend/app"]
-exclude = ["backend/alembic"]
-ignore_missing_imports = true
-# Not using the sqlalchemy mypy plugin: models.py uses the legacy Column()
-# declarative style rather than Mapped[]/mapped_column(), and the plugin's
-# stricter relationship-type inference produces more noise on that style
-# than it resolves (see the two targeted `type: ignore[assignment]` in
-# crud.py instead, which is the smaller, more honest fix here).
-
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
 pythonpath = ["backend"]

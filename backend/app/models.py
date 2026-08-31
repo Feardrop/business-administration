@@ -60,7 +60,10 @@ class Invoice(Base):
     note = Column(Text, default="")
     status = Column(String, default="offen")  # "offen" | "bezahlt"
     paid_date = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    # dt.datetime.utcnow() is deprecated (returns a naive datetime with no
+    # indication it's UTC); this keeps the same naive-UTC value the column
+    # already relied on rather than switching to timezone-aware storage.
+    created_at = Column(DateTime, default=lambda: dt.datetime.now(dt.UTC).replace(tzinfo=None))
 
     items = relationship(
         "InvoiceItem",

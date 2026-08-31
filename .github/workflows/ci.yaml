@@ -12,7 +12,13 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  # This is the version CI lints/typechecks/tests against - NOT the
+  # Dockerfile's frontend-build stage, which stays on node:20-alpine
+  # unaffected (it only runs `tsc -b && vite build`, no jsdom). jsdom's
+  # bundled undici needs a Node newer than 20.x's earlier builds provide
+  # (`webidl.util.markAsUncloneable is not a function`) - bump this rather
+  # than the Dockerfile if that resurfaces on a future jsdom/undici bump.
+  NODE_VERSION: "22"
 
 jobs:
   # Enforces the development -> release/vX.Y.Z -> main workflow: a PR into

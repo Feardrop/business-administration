@@ -1,21 +1,27 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import type { Settings } from "../types";
 
-export default function SettingsPage({ settings, onSave }) {
+interface SettingsPageProps {
+  settings: Settings;
+  onSave: (data: Settings) => Promise<void>;
+}
+
+export default function SettingsPage({ settings, onSave }: SettingsPageProps) {
   const { t } = useTranslation();
-  const [form, setForm] = useState({ ...settings });
+  const [form, setForm] = useState<Settings>({ ...settings });
   const [saved, setSaved] = useState(false);
 
-  function set(field, value) {
+  function set<K extends keyof Settings>(field: K, value: Settings[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     await onSave({
       ...form,
-      prev_year_revenue: Number(form.prev_year_revenue) || 0,
+      prev_year_revenue: String(Number(form.prev_year_revenue) || 0),
       invoice_prefix: (form.invoice_prefix || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
     });
     setSaved(true);

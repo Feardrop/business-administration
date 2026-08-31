@@ -2,12 +2,29 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fmtDate, fmtEUR, invoiceTotals } from "../utils";
 import { IconBack, IconPrint, IconTrash } from "../components/Icons";
+import type { Invoice, Settings } from "../types";
+
+interface InvoiceDetailProps {
+  invoice: Invoice | null;
+  settings: Settings;
+  onBack: () => void;
+  onMarkPaid: (id: number) => Promise<void>;
+  onMarkOpen: (id: number) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
+}
 
 // The printable invoice document below (.invoice-doc) intentionally stays in
 // German regardless of the app's UI language: it's the legal invoice text
 // sent to clients under German tax law (§19 UStG), not app chrome — it must
 // not follow the admin's language preference.
-export default function InvoiceDetail({ invoice, settings, onBack, onMarkPaid, onMarkOpen, onDelete }) {
+export default function InvoiceDetail({
+  invoice,
+  settings,
+  onBack,
+  onMarkPaid,
+  onMarkOpen,
+  onDelete,
+}: InvoiceDetailProps) {
   const { t } = useTranslation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (!invoice)

@@ -65,8 +65,8 @@ def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
 
 
 def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
-    invoice.status = status  # type: ignore[assignment]  # legacy Column() style, see AGENTS.md
-    invoice.paid_date = dt.date.today() if status == "bezahlt" else None  # type: ignore[assignment]
+    invoice.status = status  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
+    invoice.paid_date = dt.date.today() if status == "bezahlt" else None  # ty: ignore[invalid-assignment]
     db.commit()
     db.refresh(invoice)
     return invoice

@@ -14,7 +14,7 @@ repos:
       - id: check-merge-conflict
       - id: mixed-line-ending
 
-  # --- Backend: lint + format (ruff) and type-check (mypy) ---
+  # --- Backend: lint + format (ruff) ---
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.5
     hooks:
@@ -22,31 +22,47 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.1
-    hooks:
-      - id: mypy
-        additional_dependencies: [sqlalchemy==2.0.35, pydantic==2.9.2]
-        pass_filenames: false
-
-  # --- Frontend: lint + format, run through the project's own tooling
-  # rather than pre-commit's node-language support, so it reuses the
-  # existing eslint/prettier/vitest config and node_modules instead of
-  # provisioning a second, separate node environment. ---
+  # --- Backend type-check (ty), run as a local/system hook rather than
+  # via astral-sh/ty-pre-commit: that hook resolves third-party imports
+  # by having uv read [project.dependencies] from pyproject.toml, but this
+  # repo deliberately has no [project] table (see pyproject.toml's header
+  # comment). Running ty from the dev venv that already has
+  # requirements-dev.txt installed sidesteps that without duplicating the
+  # dependency list - same reasoning as the frontend-typecheck hook below. ---
   - repo: local
     hooks:
+      - id: backend-typecheck
+        name: backend ty (type-check)
+        entry: bash -c 'cd backend && ty check app'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+  # --- Frontend: lint + format + type-check, run through the project's
+  # own tooling rather than pre-commit's node-language support, so it
+  # reuses the existing eslint/prettier/tsc/vitest config and
+  # node_modules instead of provisioning a second, separate node env. ---
+  - repo: local
+    hooks:
+      - id: frontend-typecheck
+        name: frontend tsc (type-check)
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
       - id: frontend-lint
         name: frontend eslint
         entry: bash -c 'cd frontend && npm run lint'
         language: system
-        files: ^frontend/.*\.(js|jsx)$
+        files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
 
       - id: frontend-format
         name: frontend prettier --check
         entry: bash -c 'cd frontend && npm run format:check'
         language: system
-        files: ^frontend/.*\.(js|jsx|json|css|html)$
+        files: ^frontend/.*\.(ts|tsx|json|css|html)$
         pass_filenames: false
 
       # --- Fast tests, on every commit ---
@@ -61,7 +77,7 @@ repos:
         name: frontend vitest (fast)
         entry: bash -c 'cd frontend && npm test'
         language: system
-        files: ^frontend/.*\.(js|jsx)$
+        files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
 
   # --- Slow tests, only at push time (see AGENTS.md / README for the

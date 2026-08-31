@@ -1,8 +1,17 @@
 import { useTranslation } from "react-i18next";
 import { fmtDate, fmtEUR, invoiceTotals } from "../utils";
 import { IconPlus } from "../components/Icons";
+import type { Invoice } from "../types";
 
-export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMarkOpen }) {
+interface InvoiceListProps {
+  invoices: Invoice[];
+  onNew: () => void;
+  onView: (id: number) => void;
+  onMarkPaid: (id: number) => Promise<void>;
+  onMarkOpen: (id: number) => Promise<void>;
+}
+
+export default function InvoiceList({ invoices, onNew, onView, onMarkPaid, onMarkOpen }: InvoiceListProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const list = [...invoices].sort((a, b) => b.date.localeCompare(a.date));

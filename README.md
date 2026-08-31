@@ -1,136 +1,145 @@
-# Gewerbe-Verwaltung
+# Business Administration
 
-Selbst gehostetes Tool für Rechnungen, Ausgaben und eine EÜR-Vorschau
-für ein Kleingewerbe (Kleinunternehmerregelung §19 UStG). React +
-FastAPI + SQLite, alles in einem Docker-Container.
+Self-hosted tool for invoices, expenses, and an EÜR (income surplus
+statement) preview for a small German business (Kleingewerbe,
+Kleinunternehmerregelung §19 UStG). React + TypeScript + FastAPI +
+SQLite, all in one Docker container.
 
-Ersetzt keine Steuerberatung.
+Does not replace tax advice.
 
-## Schnellstart (Docker)
+## Quickstart (Docker)
 
-**Option A — aus dem Quellcode bauen:**
+**Option A — build from source:**
 ```bash
-git clone <dieses-repo> gewerbe-verwaltung
-cd gewerbe-verwaltung
+git clone <this-repo> business-administration
+cd business-administration
 docker compose up -d --build
 ```
 
-**Option B — vorgefertigtes Image von GHCR:**
+**Option B — prebuilt image from GHCR:**
 
-Jede Version ab `v0.1.0` wird beim Release automatisch nach
-`ghcr.io/feardrop/business-administration` gepusht (Tags `vX.Y.Z` und
-`latest`) — siehe `.github/workflows/cd.yaml`. Solange das Repo privat
-ist, ist auch das Image privat; einmalig einloggen mit einem
+Every version from `v0.1.0` onward is pushed automatically to
+`ghcr.io/feardrop/business-administration` on release (tags `vX.Y.Z`
+and `latest`) — see `.github/workflows/cd.yaml`. As long as the repo is
+private, the image is private too; log in once with a
 [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
-mit `read:packages`-Scope:
+that has the `read:packages` scope:
 ```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u <dein-github-user> --password-stdin
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <your-github-user> --password-stdin
 docker pull ghcr.io/feardrop/business-administration:latest
 ```
-Dann `docker-compose.yml`s `build: .` durch `image:
-ghcr.io/feardrop/business-administration:latest` ersetzen (oder eine
-eigene Compose-Datei ohne Build-Schritt verwenden) und `docker compose
-up -d` starten — ohne lokalen Checkout und ohne Build.
+Then replace `docker-compose.yml`'s `build: .` with `image:
+ghcr.io/feardrop/business-administration:latest` (or use your own
+compose file without a build step) and run `docker compose up -d` — no
+local checkout, no build.
 
-Danach im Browser: `http://<heimserver-ip>:8000`
+Then open in your browser: `http://<home-server-ip>:8000`
 
-Die Datenbank liegt als einzelne Datei unter `./data/app.db` auf dem
-Host (per Bind-Mount) — persistiert also Container-Neustarts und
--Updates. Beim ersten Start werden die Tabellen automatisch angelegt
-(kein manueller Migrationsschritt nötig).
+The database is a single file at `./data/app.db` on the host (bind
+mount) — so it survives container restarts and updates. Tables are
+created automatically on first start (no manual migration step
+needed).
 
-Trag als Erstes unter **Einstellungen** deine Geschäftsdaten ein
-(Name, Anschrift, Steuernummer) — die erscheinen auf jeder Rechnung.
+First thing to do: enter your business details under **Settings**
+(name, address, tax number) — these appear on every invoice.
 
-Die Oberfläche ist auf Deutsch und Englisch verfügbar (Umschalter unten
-in der Seitenleiste). Die gedruckte Rechnung selbst bleibt unabhängig
-davon immer auf Deutsch, da sie ein rechtsgültiges Dokument nach
-deutschem Steuerrecht ist.
+The UI is available in German and English (switcher at the bottom of
+the sidebar). The printed invoice document itself always stays in
+German regardless of that setting, since it's a legally binding
+document under German tax law. See `docs/i18n.md` for how the i18n
+setup works if you're extending the UI.
 
-## Updates einspielen
+## Applying updates
 
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-Neue Datenbank-Migrationen (falls vorhanden) laufen beim Container-Start
-automatisch (`backend/entrypoint.sh` führt `alembic upgrade head` aus,
-bevor der Server startet).
+New database migrations (if any) run automatically on container start
+(`backend/entrypoint.sh` runs `alembic upgrade head` before starting
+the server).
 
-## Backups nach pCloud
+## Backups to pCloud
 
-Backups nutzen [`rclone`](https://rclone.org) mit pCloud als Remote.
+Backups use [`rclone`](https://rclone.org) with pCloud as the remote.
 
-**Einmalige Einrichtung** (auf dem Host, nicht im Container):
+**One-time setup** (on the host, not inside the container):
 ```bash
-# rclone installieren, z. B.:
+# install rclone, e.g.:
 curl https://rclone.org/install.sh | sudo bash
 
-# pCloud-Remote einrichten (folgt dem Browser-OAuth-Flow):
+# set up the pCloud remote (follows the browser OAuth flow):
 rclone config
-# -> "n" (neues Remote) -> Name: pcloud -> Typ: pcloud -> restlichen Fragen mit Enter durch
+# -> "n" (new remote) -> name: pcloud -> type: pcloud -> accept the defaults for the rest
 ```
 
-**Backup erstellen:**
+**Create a backup:**
 ```bash
 ./backup/backup.sh
 ```
-Das Script macht einen konsistenten Snapshot der laufenden Datenbank
-(`sqlite3 .backup`, sicher auch bei laufendem Container), komprimiert
-ihn und lädt ihn nach pCloud hoch. Lokale Snapshots älter als 30 Tage
-werden automatisch aufgeräumt (einstellbar über `RETENTION_DAYS`).
+The script takes a consistent snapshot of the running database
+(`sqlite3 .backup`, safe even while the container is running),
+compresses it, and uploads it to pCloud. Local snapshots older than 30
+days are cleaned up automatically (configurable via `RETENTION_DAYS`).
 
-**Automatisch per Cron** (täglich um 3 Uhr, Beispiel):
+**Automatically via cron** (daily at 3am, example):
 ```bash
 crontab -e
-# Zeile hinzufügen:
-0 3 * * * cd /pfad/zu/gewerbe-verwaltung && ./backup/backup.sh >> backup/backup.log 2>&1
+# add this line:
+0 3 * * * cd /path/to/business-administration && ./backup/backup.sh >> backup/backup.log 2>&1
 ```
 
-**Wiederherstellen:**
+**Restore:**
 ```bash
 docker compose down
 ./backup/restore.sh backup/archive/app-20260828-030000.db.gz
 docker compose up -d
 ```
-(Datei aus pCloud vorher wieder lokal herunterladen, falls sie nicht
-mehr lokal in `backup/archive/` liegt — z. B. `rclone copy
+(Download the file back from pCloud first if it's no longer in
+`backup/archive/` locally — e.g. `rclone copy
 pcloud:GewerbeVerwaltung-Backups/app-....db.gz backup/archive/`.)
 
-Alle Details und Konfigurationsoptionen stehen als Kommentare in
+All details and configuration options are documented as comments in
 `backup/backup.sh`.
 
-## Tailscale / Netzwerk
+## Tailscale / networking
 
-Standardmäßig lauscht der Container auf Port 8000 auf allen
-Interfaces — erreichbar über die lokale Netzwerk-IP des Heimservers.
-Kein VPN/Tailscale-Setup nötig, wenn du das nur im Heimnetz nutzt. Für
-Zugriff von unterwegs müsstest du selbst einen Weg nach draußen bauen
-(Port-Forwarding, VPN deiner Wahl, Reverse Proxy) — das Tool selbst hat
-keine Authentifizierung eingebaut, also nicht ungeschützt ins offene
-Internet stellen.
+By default the container listens on port 8000 on all interfaces —
+reachable via the home server's local network IP. No VPN/Tailscale
+setup is needed if you only use this on your home network. For access
+from outside, you'd need to build your own path out (port forwarding,
+a VPN of your choice, reverse proxy) — the tool itself has no
+authentication built in, so don't expose it directly to the open
+internet.
 
-## Lokale Entwicklung ohne Docker
+## Local development without Docker
 
-Siehe `AGENTS.md` → Abschnitt "Running locally without Docker".
+See `AGENTS.md` → "Running locally without Docker" section.
 
-## Mit Claude Code / opencode weiterentwickeln
+## Developing with Claude Code / opencode
 
-Dieses Repo enthält eine `AGENTS.md` mit Projektüberblick, Konventionen
-(z. B. Geldbeträge immer als `Decimal`, nie `float`) und dem Workflow
-für Schema-Änderungen über Alembic-Migrationen. Beide Tools lesen sie
-automatisch beim Start in diesem Verzeichnis.
+This repo includes an `AGENTS.md` with a project overview, conventions
+(e.g. monetary amounts always as `Decimal`, never `float`), and the
+workflow for schema changes via Alembic migrations. Both tools read it
+automatically on startup in this directory.
 
-## Tech-Stack im Überblick
+## Documentation
 
-| Teil | Technologie |
+- `AGENTS.md` — architecture, conventions, branching/release model,
+  tooling, and the multi-agent implementation workflow.
+- `docs/i18n.md` — how the German/English UI translation is set up,
+  and how to add or change translated strings.
+
+## Tech stack at a glance
+
+| Part | Technology |
 |---|---|
-| Frontend | React 18, Vite |
+| Frontend | React 18, TypeScript, Vite |
 | i18n | i18next / react-i18next (DE/EN) |
 | Backend | FastAPI, SQLAlchemy 2.x |
-| Datenbank | SQLite (Datei unter `/data/app.db`) |
-| Migrationen | Alembic |
-| Deployment | ein Docker-Image, Multi-Stage-Build, auf GHCR veröffentlicht |
-| CI/CD | GitHub Actions — `ci.yaml` (Lint/Format/Tests), `cd.yaml` (Release) |
+| Database | SQLite (file at `/data/app.db`) |
+| Migrations | Alembic |
+| Deployment | one Docker image, multi-stage build, published to GHCR |
+| CI/CD | GitHub Actions — `ci.yaml` (lint/format/tests), `cd.yaml` (release) |
 | Backup | rclone → pCloud |

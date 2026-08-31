@@ -1,7 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { currentYear, fmtEUR, invoiceTotals } from "../utils";
+import type { Expense, Invoice, Settings, Tab } from "../types";
 
-export default function Dashboard({ settings, invoices, expenses, onTab }) {
+interface DashboardProps {
+  settings: Settings;
+  invoices: Invoice[];
+  expenses: Expense[];
+  onTab: (tab: Tab) => void;
+}
+
+export default function Dashboard({ settings, invoices, expenses, onTab }: DashboardProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const y = currentYear();

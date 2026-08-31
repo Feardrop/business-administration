@@ -1,4 +1,9 @@
-export const ApertureMark = ({ size = 30, spin = false }) => (
+interface ApertureMarkProps {
+  size?: number;
+  spin?: boolean;
+}
+
+export const ApertureMark = ({ size = 30, spin = false }: ApertureMarkProps) => (
   <svg className={spin ? "aperture-spin" : ""} width={size} height={size} viewBox="0 0 120 120">
     <g fill="#1F4A44" opacity="0.9">
       {[0, 60, 120, 180, 240, 300].map((deg) => (

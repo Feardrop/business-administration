@@ -1,6 +1,6 @@
 // Minimal smoke tests establishing the fast-test convention ci.yaml relies
 // on. Not comprehensive - that's the scope of issue #17 ("Establish a test
-// suite"). Fast tests live in `*.test.js(x)`; slow ones in `*.slow.test.jsx`
+// suite"). Fast tests live in `*.test.ts(x)`; slow ones in `*.slow.test.tsx`
 // (see package.json's `test`/`test:slow` scripts).
 import { describe, expect, it } from "vitest";
 import { fmtEUR, invoiceTotals } from "./utils";
@@ -33,7 +33,7 @@ describe("invoiceTotals", () => {
 // the ICU build) instead of a plain space. Normalize before comparing so
 // the assertion doesn't depend on which one the current environment picks.
 const NON_ASCII_SPACES = new RegExp("[\u00A0\u202F]", "g");
-const normalizeSpaces = (s) => s.replace(NON_ASCII_SPACES, " ");
+const normalizeSpaces = (s: string): string => s.replace(NON_ASCII_SPACES, " ");
 
 describe("fmtEUR", () => {
   it("formats with German locale conventions by default", () => {

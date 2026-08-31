@@ -12,8 +12,8 @@ context). Single user, low volume — built for simplicity over scale.
 ## Stack
 
 - **Backend**: FastAPI + SQLAlchemy 2.x + Alembic, Python 3.12
-- **Frontend**: React 18 + Vite (no router library — tab-based
-  navigation via a `tab` state string in `App.jsx`, see below)
+- **Frontend**: React 18 + TypeScript + Vite (no router library —
+  tab-based navigation via a `tab` state string in `App.tsx`, see below)
 - **Database**: SQLite, file at `/data/app.db` in the container
   (`DATABASE_URL` env var controls this — see `backend/app/database.py`)
 - **Deployment**: one Docker container. The image builds the React app
@@ -34,18 +34,20 @@ backend/
     routers/            one file per resource (settings, invoices, expenses)
   alembic/               migrations — see "Changing the schema" below
   tests/                   pytest suite — see "Testing" below
-  requirements-dev.txt       pytest/ruff/mypy/pre-commit, kept out of the runtime image
+  requirements-dev.txt       pytest/ruff/ty/pre-commit, kept out of the runtime image
   entrypoint.sh          runs `alembic upgrade head` then starts uvicorn
 frontend/
   src/
-    App.jsx               top-level state + tab switch, talks to api.js
-    api.js                 fetch wrapper for /api/*
-    utils.js                 formatting + invoice-total calculations
-    i18n/                     i18next setup (index.js) + locales/{de,en}.json
+    App.tsx               top-level state + tab switch, talks to api.ts
+    api.ts                 fetch wrapper for /api/*
+    types.ts                shared TS types mirroring backend/app/schemas.py
+    utils.ts                 formatting + invoice-total calculations
+    i18n/                     i18next setup (index.ts) + locales/{de,en}.json
     pages/                    Dashboard, InvoiceList, InvoiceForm, InvoiceDetail, Expenses, SettingsPage
     components/               Sidebar (incl. language switch), Icons
     styles.css                 all styling — plain CSS with custom properties, no framework
-    *.test.js(x) / *.slow.test.jsx   Vitest — see "Testing" below
+    *.test.ts(x) / *.slow.test.tsx   Vitest — see "Testing" below
+  tsconfig.json, tsconfig.app.json, tsconfig.node.json   TS project references (strict mode)
   eslint.config.js, .prettierrc.json   frontend lint/format config
 backup/
   backup.sh, restore.sh   sqlite snapshot + rclone-to-pCloud upload/restore
@@ -53,7 +55,7 @@ backup/
   workflows/ci.yaml            lint/format/fast-tests + slow-tests + branch-policy + docker-build
   workflows/cd.yaml            tag + GitHub Release + GHCR image + post-release branch/PR, on merge to main
   scripts/extract_changelog_section.py   pulls one version's notes out of CHANGELOG.md for cd.yaml
-pyproject.toml             ruff/mypy/pytest config (tool config only — not a packaged project)
+pyproject.toml             ruff/pytest config (tool config only — not a packaged project)
 .pre-commit-config.yaml      the lint/format/test suite CI and local commits both run
 VERSION                       plain `X.Y.Z`, bumped on a release/* branch — see "Branching and releasing"
 CHANGELOG.md                Keep a Changelog — add entries under [Unreleased] in the same PR as the change
@@ -74,7 +76,7 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Frontend (separate terminal — Vite dev server proxies `/api` to
-`localhost:8000`, see `frontend/vite.config.js`):
+`localhost:8000`, see `frontend/vite.config.ts`):
 ```
 cd frontend
 npm install
@@ -161,19 +163,21 @@ enough to pick up new migrations in production — no manual DB step.
   copy) goes through `t("namespace.key")` — add the string to both
   `frontend/src/i18n/locales/de.json` and `en.json`, never hardcode new
   UI text in a component. Keep the German tone direct and slightly
-  informal ("du"). The language switch (DE/EN buttons in `Sidebar.jsx`)
+  informal ("du"). The language switch (DE/EN buttons in `Sidebar.tsx`)
   persists to `localStorage` via `i18next-browser-languagedetector`,
-  which also picks the browser language on first visit.
+  which also picks the browser language on first visit. See
+  `docs/i18n.md` for the full guide (adding a string, adding a
+  namespace, testing translations).
   - **Exception: the printable invoice document** (the `.invoice-doc`
-    block in `InvoiceDetail.jsx`) is hardcoded German and does *not* go
+    block in `InvoiceDetail.tsx`) is hardcoded German and does *not* go
     through `t()`. It's the actual legal invoice sent to clients under
     German tax law (§19 UStG) — its language must not follow the
     admin's UI language preference. Everything around it (buttons,
     confirm dialogs) is translated normally.
-  - `EXPENSE_CATEGORIES` in `utils.js` are canonical keys (`"equipment"`,
+  - `EXPENSE_CATEGORIES` in `utils.ts` are canonical keys (`"equipment"`,
     `"software"`, …) stored as-is in the DB; translate the *label* via
     `t(\`expenses.categories.${key}\`)`, never the stored value.
-  - `fmtEUR`/`fmtDate` in `utils.js` take a `lang` ("de"/"en") param and
+  - `fmtEUR`/`fmtDate` in `utils.ts` take a `lang` ("de"/"en") param and
     format via `Intl`/`toLocaleDateString` — pass the current
     `i18n.language`, or `"de"` explicitly for the invoice document.
 - No authentication layer exists — this assumes it's only reachable on
@@ -193,16 +197,21 @@ test commands — `.github/workflows/ci.yaml` runs the exact same config
 (`pre-commit run --all-files`), so a clean local run means CI will pass.
 It covers, in order: standard hygiene hooks, `ruff check --fix` +
 `ruff format` (backend lint/format — see `pyproject.toml`'s `[tool.ruff]`
-for the FastAPI-`Depends()` bugbear allowlist), `mypy` (backend
-type-check; two `type: ignore[assignment]` lines in `crud.py` are a
-known false-positive from `models.py`'s legacy `Column()` declarative
-style, not real bugs — see the comments there before adding the
-`sqlalchemy` mypy plugin to try to remove them, which trades this for
-noisier `relationship()`-inference errors on that style), `eslint` +
-`prettier --check` (frontend, via the project's own `npm run
-lint`/`format:check` rather than pre-commit's node-language support, so
-it reuses `frontend/node_modules` instead of provisioning a second node
-env), then the fast test suites. Slow tests
+for the FastAPI-`Depends()` bugbear allowlist), `ty check app` (backend
+type-check, run as a `local`/`language: system` hook rather than via
+`astral-sh/ty-pre-commit` — that hook resolves third-party imports
+through `uv` reading `[project.dependencies]` from `pyproject.toml`, but
+this repo deliberately has no `[project]` table, so `ty` instead runs
+from whatever Python environment `requirements-dev.txt` is installed
+into, same as `backend-fast-tests` below; two
+`ty: ignore[invalid-assignment]` lines in `crud.py` are a known
+false-positive from `models.py`'s legacy `Column()` declarative style,
+not real bugs — see the comments there), `eslint` + `prettier --check`
+(frontend, via the project's own `npm run lint`/`format:check` rather
+than pre-commit's node-language support, so it reuses
+`frontend/node_modules` instead of provisioning a second node env),
+`tsc -b` (frontend type-check, `frontend-typecheck`, same
+system-hook reasoning as `ty`), then the fast test suites. Slow tests
 (`backend-slow-tests`/`frontend-slow-tests`) only run at the `pre-push`
 stage and in CI's separate `slow-tests` job — see "Testing" below for
 what "slow" means here. A `pre-commit-update` hook checks (dry-run only,
@@ -226,17 +235,18 @@ pytest -m slow         # slow — what pre-push and CI's slow-tests job run
 pytest                 # everything
 ```
 
-**Frontend** — Vitest. Fast tests live in `*.test.js(x)`; slow ones in
-`*.slow.test.jsx` (see `frontend/package.json`'s `test`/`test:slow`
+**Frontend** — Vitest. Fast tests live in `*.test.ts(x)`; slow ones in
+`*.slow.test.tsx` (see `frontend/package.json`'s `test`/`test:slow`
 scripts, which filter by that naming convention since Vitest has no
 pytest-style marker system).
 ```
 npm test        # fast
 npm run test:slow
+npm run typecheck  # tsc -b, no emit — same check as the frontend-typecheck hook
 ```
 
-`backend/tests/test_smoke.py` and `frontend/src/utils.test.js` /
-`App.slow.test.jsx` are deliberately minimal — they exist to give the
+`backend/tests/test_smoke.py` and `frontend/src/utils.test.ts` /
+`App.slow.test.tsx` are deliberately minimal — they exist to give the
 fast/slow split something real to run, not as coverage. Comprehensive
 coverage (Decimal handling, the `is_kleinunternehmer`/`vat_rate`
 snapshot behavior, invoice-numbering edge cases, etc.) is tracked
