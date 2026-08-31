@@ -40,21 +40,6 @@ class InvoiceIssueValidationError(Exception):
         super().__init__(message)
 
 
-def _invoice_gross_total(invoice: models.Invoice, kleinunternehmer: bool) -> Decimal:
-    """The gross total an invoice will have once issued, given whether the
-    Kleinunternehmer exemption applies — used only to decide whether the
-    §33 UStDV Kleinbetragsrechnung threshold kicks in (see
-    `_missing_issue_fields`), not as a general-purpose totals API (the
-    frontend's `invoiceTotals` in utils.ts owns display-side totals).
-    """
-    total = Decimal("0")
-    for item in invoice.items:
-        net = Decimal(item.qty) * Decimal(item.price)
-        rate = Decimal("0") if kleinunternehmer else Decimal(item.vat_rate or 0)
-        total += net * (Decimal("1") + rate / Decimal("100"))
-    return total
-
-
 def _missing_issue_fields(invoice: models.Invoice, settings: models.Settings) -> list[str]:
     """The §14 Abs. 4 UStG mandatory-field checklist for `issue_invoice`.
 
@@ -82,7 +67,7 @@ def _missing_issue_fields(invoice: models.Invoice, settings: models.Settings) ->
     # threshold (§33 UStDV) — under it, the reduced requirements apply and
     # the recipient's address may be omitted (though nothing stops the user
     # from including it anyway).
-    gross = _invoice_gross_total(invoice, bool(settings.kleinunternehmer))
+    gross = models.invoice_gross_total(invoice, bool(settings.kleinunternehmer))
     if gross >= KLEINBETRAGSRECHNUNG_THRESHOLD and not (invoice.client_address or "").strip():
         missing.append("Kunde – Anschrift (ab 250 € Gesamtbetrag)")
 
@@ -337,12 +322,65 @@ def cancel_and_correct(
     return cancellation, draft
 
 
-def set_invoice_status(db: Session, invoice: models.Invoice, status: str) -> models.Invoice:
-    invoice.status = status  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
-    invoice.paid_date = dt.date.today() if status == "bezahlt" else None  # ty: ignore[invalid-assignment]
+def recompute_status(db: Session, invoice: models.Invoice) -> None:
+    """Derive "offen"/"teilweise bezahlt"/"bezahlt" from the sum of
+    `invoice`'s payments vs. its `gross_total` — the single place issue
+    #30 replaces the old boolean `paid_date` toggle with. Called by
+    `record_payment` and `delete_payment` after each ledger change;
+    doesn't commit itself, so the caller can do so in one transaction
+    together with the payment insert/delete.
+
+    "storniert" is terminal (see `cancel_invoice`'s docstring) and
+    short-circuits here unconditionally: a cancelled invoice's (now moot)
+    payment history must never flip it back to an active status.
+    """
+    if invoice.status == "storniert":
+        return
+    paid = (
+        db.query(func.coalesce(func.sum(models.Payment.amount), 0))
+        .filter(models.Payment.invoice_id == invoice.id)
+        .scalar()
+    )
+    paid = Decimal(paid)
+    gross = models.invoice_gross_total(invoice, bool(invoice.is_kleinunternehmer))
+    if paid <= 0:
+        invoice.status = "offen"  # ty: ignore[invalid-assignment]  # legacy Column() style, see AGENTS.md
+    elif paid < gross:
+        invoice.status = "teilweise bezahlt"  # ty: ignore[invalid-assignment]
+    else:
+        invoice.status = "bezahlt"  # ty: ignore[invalid-assignment]
+
+
+def record_payment(db: Session, invoice: models.Invoice, data: schemas.PaymentIn) -> models.Invoice:
+    """Append a `Payment` row (date defaults to today, but honors an
+    explicit override — see `schemas.PaymentIn`) and recompute `invoice`'s
+    status from the new total. Overpayment is allowed and simply flagged
+    (`models.Invoice.overpaid`), not rejected or capped.
+    """
+    payment = models.Payment(
+        invoice_id=invoice.id,
+        date=data.date or dt.date.today(),
+        amount=data.amount,
+        method=data.method,
+        note=data.note,
+    )
+    db.add(payment)
+    db.flush()
+    recompute_status(db, invoice)
     db.commit()
     db.refresh(invoice)
     return invoice
+
+
+def delete_payment(db: Session, invoice: models.Invoice, payment: models.Payment) -> None:
+    """Remove one payment and recompute `invoice`'s status from what
+    remains — a cancelled ("storniert") invoice stays cancelled regardless
+    (see `recompute_status`).
+    """
+    db.delete(payment)
+    db.flush()
+    recompute_status(db, invoice)
+    db.commit()
 
 
 def delete_invoice(db: Session, invoice: models.Invoice) -> None:

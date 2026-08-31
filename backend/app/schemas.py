@@ -11,12 +11,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# The full target status lifecycle (see models.Invoice's docstring for the
-# diagram). Only "draft", "offen" and "bezahlt" are reachable today — this
-# codebase does not implement "teilweise bezahlt" (future #30, partial
-# payments) or "storniert" (future #26, cancellation) yet. All five are
-# listed here up front so InvoiceOut doesn't need a breaking schema change
-# when those issues land.
+# The full status lifecycle (see models.Invoice's docstring for the
+# diagram) — all five are reachable now that #26 (cancellation) and #30
+# (partial payments) have both landed.
 InvoiceStatus = Literal["draft", "offen", "teilweise bezahlt", "bezahlt", "storniert"]
 
 
@@ -97,6 +94,41 @@ class InvoiceUpdate(BaseModel):
     items: list[InvoiceItemIn] | None = None
 
 
+class PaymentIn(BaseModel):
+    """Payload for `POST /api/invoices/{id}/payments`.
+
+    `date` defaults to today (in `crud.record_payment`) when omitted, but
+    is always overridable — this is the actual fix for issue #30's
+    cash-basis tax-year attribution bug: German Zufluss-Prinzip attributes
+    income to the year money was actually received, not the year it was
+    typed into the app (e.g. a December payment entered the following
+    March must still count as December income).
+    """
+
+    date: dt.date | None = None
+    amount: Decimal
+    method: str = ""
+    note: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def _amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Zahlungsbetrag muss größer als 0 sein.")
+        return v
+
+
+class PaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    invoice_id: int
+    date: dt.date
+    amount: Decimal
+    method: str
+    note: str | None
+
+
 class InvoiceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,7 +142,6 @@ class InvoiceOut(BaseModel):
     is_kleinunternehmer: bool | None
     note: str
     status: InvoiceStatus
-    paid_date: dt.date | None
     issued_at: dt.date | None
     created_at: dt.datetime
     # Set together with status="storniert" by crud.cancel_invoice. Null on
@@ -125,6 +156,14 @@ class InvoiceOut(BaseModel):
     # otherwise, including on a cancellation invoice itself.
     cancellation_invoice_id: int | None
     items: list[InvoiceItemOut]
+    # The payment ledger (issue #30), replacing the old boolean paid_date.
+    # amount_paid/amount_due/overpaid are computed properties on
+    # models.Invoice (see there) — amount_due is floored at 0, so check
+    # `overpaid` rather than a negative amount_due to detect one.
+    payments: list[PaymentOut]
+    amount_paid: Decimal
+    amount_due: Decimal
+    overpaid: bool
 
 
 _VALID_EXPENSE_CATEGORIES = ["equipment", "software", "travel", "insurance", "rent", "training", "other"]

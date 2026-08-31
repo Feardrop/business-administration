@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, models, schemas
 from ..database import get_db
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
@@ -59,7 +59,7 @@ def issue_invoice(invoice_id: int, db: Session = Depends(get_db)):
         ) from exc
 
 
-_CANCELLABLE_STATUSES = ("offen", "bezahlt")
+_CANCELLABLE_STATUSES = ("offen", "teilweise bezahlt", "bezahlt")
 
 
 @router.post("/{invoice_id}/cancel", response_model=schemas.InvoiceOut, status_code=201)
@@ -85,16 +85,32 @@ def cancel_and_correct_invoice(invoice_id: int, data: schemas.CancelInvoiceIn, d
     return {"cancellation": cancellation, "draft": draft}
 
 
-@router.post("/{invoice_id}/mark-paid", response_model=schemas.InvoiceOut)
-def mark_paid(invoice_id: int, db: Session = Depends(get_db)):
-    invoice = _get_or_404(db, invoice_id)
-    return crud.set_invoice_status(db, invoice, "bezahlt")
+# A boolean paid/open toggle doesn't fit a many-payments ledger (issue
+# #30) — replaced by a real payment history below. Only an already-issued,
+# not-yet-cancelled invoice can receive a payment; "bezahlt" stays
+# payable too (a correction, or an intentional overpayment — flagged via
+# InvoiceOut.overpaid, never rejected or capped).
+_PAYABLE_STATUSES = ("offen", "teilweise bezahlt", "bezahlt")
 
 
-@router.post("/{invoice_id}/mark-open", response_model=schemas.InvoiceOut)
-def mark_open(invoice_id: int, db: Session = Depends(get_db)):
+@router.post("/{invoice_id}/payments", response_model=schemas.InvoiceOut, status_code=201)
+def create_payment(invoice_id: int, data: schemas.PaymentIn, db: Session = Depends(get_db)):
     invoice = _get_or_404(db, invoice_id)
-    return crud.set_invoice_status(db, invoice, "offen")
+    if invoice.status not in _PAYABLE_STATUSES:
+        raise HTTPException(
+            409,
+            "Zahlungen können nur zu ausgestellten, nicht stornierten Rechnungen erfasst werden.",
+        )
+    return crud.record_payment(db, invoice, data)
+
+
+@router.delete("/{invoice_id}/payments/{payment_id}", status_code=204)
+def delete_payment(invoice_id: int, payment_id: int, db: Session = Depends(get_db)):
+    invoice = _get_or_404(db, invoice_id)
+    payment = db.get(models.Payment, payment_id)
+    if payment is None or payment.invoice_id != invoice.id:
+        raise HTTPException(404, "Zahlung nicht gefunden.")
+    crud.delete_payment(db, invoice, payment)
 
 
 @router.delete("/{invoice_id}", status_code=204)
