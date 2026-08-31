@@ -11,6 +11,39 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Added
 
+- Invoice cancellation / Stornorechnung (issue #26): an issued invoice
+  (`offen`/`bezahlt`) can no longer be edited away or is left with no undo
+  path — §14c UStG requires reversing it with a formal, separately-numbered
+  counter-document instead of deleting or silently correcting it.
+  - `POST /api/invoices/{id}/cancel` (body: `{"reason": "..."}`, required
+    non-blank) marks the original `storniert` (`cancelled_at`,
+    `cancel_reason`) and, in the same transaction, creates and issues a new
+    Invoice whose line items are copies of the original's with `qty`
+    negated (`price`/`vat_rate` unchanged per line) — routed through the
+    existing `issue_invoice` path, so the cancellation invoice gets its own
+    real sequential number and is_kleinunternehmer snapshot, not a flag on
+    the original. `cancels_invoice_id` links the cancellation back to what
+    it cancels; `cancellation_invoice_id` on `InvoiceOut` is the reverse
+    link.
+  - `POST /api/invoices/{id}/cancel-and-correct` does the same cancellation
+    and additionally returns a fresh editable draft pre-filled from the
+    original (client, items, service date), ready to correct and re-issue.
+  - `storniert` is a terminal status, reachable only via these two routes;
+    a draft is still just deleted, and an already-`storniert` invoice
+    cannot be cancelled again.
+  - The frontend gained Cancel / Cancel-and-correct actions (with a
+    reason-entry step) on an `offen`/`bezahlt` invoice's detail page, a
+    "storniert" banner linking to the resulting cancellation invoice (and,
+    on a cancellation invoice, a link back to the original), and a
+    `storniert` badge on the invoice list. Dashboard revenue/VAT/open-
+    balance/threshold figures are now computed by a single
+    `computeInvoiceStats()` that excludes `storniert` invoices, rather than
+    relying on each stat's own status filter happening to already do so.
+  - New UI copy uses "Storno"/"stornieren"/"Stornorechnung" (German) and
+    "cancel"/"cancellation"/"cancellation invoice" (English) —
+    "Gutschrift"/"credit note" is a different legal instrument under §14c
+    UStG and must never appear here; guarded by a permanent test that scans
+    both locale files for the term.
 - §14 UStG mandatory invoice fields (issue #33):
   - `Invoice.service_date`/`service_period_text` — the invoice can now
     state when the service was actually rendered (an exact Leistungsdatum,

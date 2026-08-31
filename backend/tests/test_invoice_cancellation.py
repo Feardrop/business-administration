@@ -87,7 +87,7 @@ def test_cancel_creates_negated_invoice_with_own_number(client):
     assert cancellation["number"] != issued["number"]
 
     assert len(cancellation["items"]) == len(issued["items"])
-    for orig_item, cancel_item in zip(issued["items"], cancellation["items"]):
+    for orig_item, cancel_item in zip(issued["items"], cancellation["items"], strict=True):
         assert Decimal(cancel_item["qty"]) == -Decimal(orig_item["qty"])
         # vat_rate is a per-line property independent of sign (issue #33) --
         # it must survive the negation unchanged.
@@ -110,7 +110,7 @@ def test_original_stays_retrievable_after_cancel(client):
     assert body["cancelled_at"] == dt.date.today().isoformat()
     assert body["cancel_reason"] == "Falscher Betrag berechnet"
     # The original's own items are untouched -- not negated in place.
-    for orig_item, item in zip(issued["items"], body["items"]):
+    for orig_item, item in zip(issued["items"], body["items"], strict=True):
         assert Decimal(item["qty"]) == Decimal(orig_item["qty"])
         assert Decimal(item["price"]) == Decimal(orig_item["price"])
     # And the reverse link resolves back to the cancellation invoice.
@@ -135,7 +135,7 @@ def test_cancel_and_correct_prefills_draft(client):
     assert draft["client_name"] == issued["client_name"]
     assert draft["service_date"] == issued["service_date"]
     assert len(draft["items"]) == len(issued["items"])
-    for orig_item, draft_item in zip(issued["items"], draft["items"]):
+    for orig_item, draft_item in zip(issued["items"], draft["items"], strict=True):
         assert draft_item["description"] == orig_item["description"]
         assert Decimal(draft_item["qty"]) == Decimal(orig_item["qty"])
         assert Decimal(draft_item["price"]) == Decimal(orig_item["price"])
@@ -186,6 +186,23 @@ def test_existing_cancellation_fields_default_null(db_session):
     assert invoice.cancels_invoice_id is None
 
 
+def _find_forbidden_terms(node, forbidden: tuple[str, ...], path: str = "$") -> list[tuple[str, str]]:
+    """Recursively scan a JSON-decoded value for any of `forbidden` as a
+    case-insensitive substring, returning `(json_path, term)` for every hit.
+    """
+    offending: list[tuple[str, str]] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            offending.extend(_find_forbidden_terms(value, forbidden, f"{path}.{key}"))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            offending.extend(_find_forbidden_terms(value, forbidden, f"{path}[{i}]"))
+    elif isinstance(node, str):
+        lowered = node.lower()
+        offending.extend((path, term) for term in forbidden if term in lowered)
+    return offending
+
+
 def test_locale_files_never_say_gutschrift():
     """Permanent guard for the terminology requirement (issue #26): a
     Stornorechnung (cancellation invoice) is a distinct legal instrument
@@ -197,20 +214,5 @@ def test_locale_files_never_say_gutschrift():
 
     for filename in ("de.json", "en.json"):
         data = json.loads((LOCALES_DIR / filename).read_text())
-        offending = []
-
-        def _walk(node, path):
-            if isinstance(node, dict):
-                for key, value in node.items():
-                    _walk(value, f"{path}.{key}")
-            elif isinstance(node, str):
-                lowered = node.lower()
-                for term in forbidden:
-                    if term in lowered:
-                        offending.append((path, term))
-            elif isinstance(node, list):
-                for i, value in enumerate(node):
-                    _walk(value, f"{path}[{i}]")
-
-        _walk(data, filename)
+        offending = _find_forbidden_terms(data, forbidden, filename)
         assert not offending, f"{filename} contains forbidden terminology: {offending}"

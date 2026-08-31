@@ -306,7 +306,9 @@ def cancel_invoice(db: Session, invoice: models.Invoice, reason: str) -> models.
     return issue_invoice(db, cancellation)
 
 
-def cancel_and_correct(db: Session, invoice: models.Invoice, reason: str) -> tuple[models.Invoice, models.Invoice]:
+def cancel_and_correct(
+    db: Session, invoice: models.Invoice, reason: str
+) -> tuple[models.Invoice, models.Invoice]:
     """`cancel_invoice`, plus a fresh editable draft pre-filled from the
     original — for the common real-world case where an invoice was wrong
     and needs to be reissued with corrections, not just reversed.
@@ -321,10 +323,10 @@ def cancel_and_correct(db: Session, invoice: models.Invoice, reason: str) -> tup
 
     draft_data = schemas.InvoiceCreate(
         date=dt.date.today(),
-        client_name=invoice.client_name,
-        client_address=invoice.client_address,
-        service_date=invoice.service_date,
-        service_period_text=invoice.service_period_text,
+        client_name=invoice.client_name,  # ty: ignore[invalid-argument-type]  # legacy Column() style, see AGENTS.md
+        client_address=invoice.client_address,  # ty: ignore[invalid-argument-type]
+        service_date=invoice.service_date,  # ty: ignore[invalid-argument-type]
+        service_period_text=invoice.service_period_text,  # ty: ignore[invalid-argument-type]
         note="",
         items=[
             schemas.InvoiceItemIn(description=i.description, qty=i.qty, price=i.price, vat_rate=i.vat_rate)
