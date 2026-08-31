@@ -180,6 +180,10 @@ enough to pick up new migrations in production — no manual DB step.
   - `fmtEUR`/`fmtDate` in `utils.ts` take a `lang` ("de"/"en") param and
     format via `Intl`/`toLocaleDateString` — pass the current
     `i18n.language`, or `"de"` explicitly for the invoice document.
+- **Timestamps** are stored as naive-UTC via `dt.datetime.now(dt.UTC).replace(tzinfo=None)` (e.g.,
+  `created_at` in `models.py`). SQLite doesn't persist timezone offsets, and these columns
+  are record-keeping only, not display — naive-UTC is sufficient and avoids deprecated
+  `datetime.utcnow()`. Use this pattern for any future timestamp column.
 - No authentication layer exists — this assumes it's only reachable on
   the home network / VPN. If you add auth, it belongs in
   `backend/app/main.py` as middleware, not scattered per-router.
