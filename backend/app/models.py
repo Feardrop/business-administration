@@ -52,6 +52,11 @@ class Invoice(Base):
 
     id = Column(Integer, primary_key=True)
     number = Column(String, unique=True, nullable=False, index=True)
+    # The numeric part `number` is formatted from. This is what numbering
+    # actually operates on (MAX(sequence) + 1, scoped to the invoice's
+    # creation year) - `number` is a derived display string, never parsed
+    # back apart to figure out the next value. See crud._next_invoice_number.
+    sequence = Column(Integer, nullable=False)
     date = Column(Date, nullable=False)
     client_name = Column(String, nullable=False)
     client_address = Column(Text, default="")

@@ -5,7 +5,7 @@ FastAPI route handlers so the logic is easy to unit test on its own.
 import datetime as dt
 from decimal import Decimal
 
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -30,11 +30,21 @@ def update_settings(db: Session, data: schemas.SettingsSchema) -> models.Setting
     return settings
 
 
-def _next_invoice_number(db: Session, settings: models.Settings) -> str:
+def _next_invoice_number(db: Session, settings: models.Settings) -> tuple[int, str]:
+    """Compute the next (sequence, formatted number) pair for a new invoice.
+
+    Takes MAX(sequence) + 1 among this year's invoices rather than
+    COUNT(*), so a deleted invoice (from the middle or the end of the
+    series) never causes the next number to collide with or reuse an
+    existing one - COUNT shifts down on delete, MAX doesn't.
+    """
     year = dt.date.today().year
-    count = db.query(models.Invoice).filter(models.Invoice.number.like(f"%{year}%")).count()
+    max_sequence = (
+        db.query(func.max(models.Invoice.sequence)).filter(models.Invoice.number.like(f"%{year}%")).scalar()
+    )
+    sequence = (max_sequence or 0) + 1
     prefix = f"{settings.invoice_prefix}-" if settings.invoice_prefix else ""
-    return f"{prefix}{year}-{count + 1:03d}"
+    return sequence, f"{prefix}{year}-{sequence:03d}"
 
 
 def list_invoices(db: Session):
@@ -47,8 +57,10 @@ def get_invoice(db: Session, invoice_id: int):
 
 def create_invoice(db: Session, data: schemas.InvoiceCreate) -> models.Invoice:
     settings = get_settings(db)
+    sequence, number = _next_invoice_number(db, settings)
     invoice = models.Invoice(
-        number=_next_invoice_number(db, settings),
+        sequence=sequence,
+        number=number,
         date=data.date,
         client_name=data.client_name,
         client_address=data.client_address,
