@@ -54,6 +54,17 @@ here relates to the `release/vX.Y.Z` branch workflow.
   `development`/`release/*`/`main` directly, and previously got zero CI
   checks as a result.
 
+### Security
+
+- Hardened `spa_catch_all`'s static-file serving against path traversal:
+  a user-controlled URL segment (e.g. `..%2f..%2fetc%2fpasswd`, a
+  percent-encoded `../`) could previously resolve outside `STATIC_DIR` and
+  serve arbitrary files readable by the process, including the SQLite
+  database that holds the entire tax history (`/data/app.db` in the
+  container). The joined candidate path is now resolved and required to
+  stay under a once-resolved `STATIC_DIR` before being served; anything
+  that doesn't falls through to the existing `index.html` SPA response.
+
 ## [0.1.0] - 2026-08-28
 
 ### Added

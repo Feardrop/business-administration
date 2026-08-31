@@ -23,6 +23,10 @@ app.include_router(expenses.router)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 if STATIC_DIR.exists():
+    # Resolved once so every request can be checked against it below without
+    # re-resolving on each call.
+    static_root = STATIC_DIR.resolve()
+
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
@@ -32,11 +36,19 @@ if STATIC_DIR.exists():
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
 
-        # Any path that isn't /api/... or /assets/... falls through to
-        # index.html so React Router (client-side routing) can take over.
-        candidate = STATIC_DIR / full_path
-        if candidate.is_file():
+        # Guard: `full_path` is user-controlled and may contain `../` (or an
+        # encoding of it that survives to here, e.g. `%2f`) — resolve the
+        # joined path and require it stay inside STATIC_DIR before treating
+        # it as a real file, rather than trusting upstream (Starlette/uvicorn)
+        # to have normalized it away already. A path that escapes falls
+        # through to the same index.html response as any other unknown route.
+        candidate = (STATIC_DIR / full_path).resolve()
+        if candidate.is_relative_to(static_root) and candidate.is_file():
             return FileResponse(candidate)
+
+        # Any path that isn't /api/... or /assets/... (or that tried to
+        # escape STATIC_DIR above) falls through to index.html so React
+        # Router (client-side routing) can take over.
         return FileResponse(STATIC_DIR / "index.html")
 else:
 
