@@ -1,5 +1,7 @@
 # Business Administration
 
+[![CI](https://github.com/Feardrop/business-administration/actions/workflows/ci.yaml/badge.svg)](https://github.com/Feardrop/business-administration/actions/workflows/ci.yaml)
+
 Self-hosted tool for invoices, expenses, and an EÜR (income surplus
 statement) preview for a small German business (Kleingewerbe,
 Kleinunternehmerregelung §19 UStG). React + TypeScript + FastAPI +
