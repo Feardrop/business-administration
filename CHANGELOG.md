@@ -11,6 +11,47 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Added
 
+- Payment ledger replacing the boolean paid/open toggle (issue #30): an
+  invoice's status is no longer a manual "mark paid" button — it's derived
+  from a real `Payment` history, so partial payments and cash-basis
+  tax-year attribution (Zufluss-Prinzip) both work correctly.
+  - New `Payment` model (`invoice_id`, `date`, `amount`, `method`, `note`).
+    `date` defaults to today but is always user-overridable — this is the
+    actual fix for the tax-year bug: recording a payment used to always
+    stamp `paid_date = today()`, so a payment physically received in
+    December but only entered into the app in March got attributed to the
+    wrong tax year.
+  - `POST /api/invoices/{id}/payments` (body: `{"amount", "date"?,
+    "method"?, "note"?}`) appends a payment and recomputes the invoice's
+    status from the sum of its payments vs. its gross total: `offen` (no
+    payments), `teilweise bezahlt` (partial), `bezahlt` (full or more).
+    `DELETE /api/invoices/{id}/payments/{payment_id}` removes one and
+    recomputes the same way. `POST .../mark-paid` and `.../mark-open` are
+    gone.
+  - `storniert` (issue #26) stays terminal: `crud.recompute_status` checks
+    for it first and short-circuits unconditionally, so a cancelled
+    invoice's payment history can never flip it back to an active status.
+    Cancelling a `teilweise bezahlt` invoice is now allowed too (`POST
+    .../cancel[-and-correct]` previously only accepted `offen`/`bezahlt`,
+    a gap left by #26 predating this status).
+  - Overpayment (payments summing above the gross total) is flagged via
+    `InvoiceOut.overpaid` rather than rejected, capped, or left to show a
+    negative amount due — no refund workflow, no Skonto handling, both out
+    of scope here.
+  - The invoice detail page gained a payment-history list and a "record
+    payment" form (amount, date defaulting to today but editable, method)
+    replacing the single mark-paid button; the invoice list shows a
+    "teilweise bezahlt" badge with the remaining balance, and an
+    "überzahlt"/"overpaid" badge on an overpaid invoice.
+  - Dashboard income/VAT/revenue figures are now attributed by each
+    *payment's own* date, not by invoice status/date — a partial payment's
+    income/VAT are split proportionally to the share of the invoice's
+    gross it settles. The "open" balance sums the remaining amount due
+    (gross minus payments-to-date) for a `teilweise bezahlt` invoice, not
+    its full gross.
+  - Migration backfills every legacy `bezahlt` invoice's non-null
+    `paid_date` into one full-gross-amount `Payment` row dated `paid_date`,
+    then drops the now-redundant `Invoice.paid_date` column.
 - Invoice cancellation / Stornorechnung (issue #26): an issued invoice
   (`offen`/`bezahlt`) can no longer be edited away or is left with no undo
   path — §14c UStG requires reversing it with a formal, separately-numbered
