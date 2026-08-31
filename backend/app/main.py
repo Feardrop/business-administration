@@ -8,7 +8,7 @@ container: one Python process, one port.
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -27,6 +27,11 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}")
     def spa_catch_all(full_path: str):
+        # Guard: reject unmatched /api/* paths (real API routes are registered
+        # before this catch-all, so only typos/missing endpoints reach here)
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404)
+
         # Any path that isn't /api/... or /assets/... falls through to
         # index.html so React Router (client-side routing) can take over.
         candidate = STATIC_DIR / full_path
