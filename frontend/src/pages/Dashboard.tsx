@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { currentYear, fmtEUR, invoiceTotals } from "../utils";
+import { currentYear, fmtEUR, invoiceTotals, isoYear } from "../utils";
 import type { Expense, Invoice, Settings, Tab } from "../types";
 
 interface DashboardProps {
@@ -13,11 +13,9 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const y = currentYear();
-  const paidThisYear = invoices.filter(
-    (i) => i.status === "bezahlt" && i.paid_date && new Date(i.paid_date).getFullYear() === y
-  );
+  const paidThisYear = invoices.filter((i) => i.status === "bezahlt" && i.paid_date && isoYear(i.paid_date) === y);
   const openInvoices = invoices.filter((i) => i.status === "offen");
-  const expensesThisYear = expenses.filter((e) => new Date(e.date).getFullYear() === y);
+  const expensesThisYear = expenses.filter((e) => isoYear(e.date) === y);
 
   const income = paidThisYear.reduce((s, i) => s + invoiceTotals(i).net, 0);
   const vatCollected = paidThisYear.reduce((s, i) => s + invoiceTotals(i).vat, 0);

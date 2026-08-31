@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { EXPENSE_CATEGORIES, fmtDate, fmtEUR, todayISO, type ExpenseCategory } from "../utils";
+import { EXPENSE_CATEGORIES, fmtDate, fmtEUR, isoYear, todayISO, type ExpenseCategory } from "../utils";
 import { IconPlus, IconTrash } from "../components/Icons";
 import type { Expense, ExpenseCreateInput } from "../types";
 
@@ -21,11 +21,10 @@ export default function Expenses({ expenses, onCreate, onDelete }: ExpensesProps
   const [confirmId, setConfirmId] = useState<number | null>(null);
 
   const years = useMemo(
-    () => Array.from(new Set(expenses.map((e) => new Date(e.date).getFullYear()))).sort((a, b) => b - a),
+    () => Array.from(new Set(expenses.map((e) => isoYear(e.date)))).sort((a, b) => b - a),
     [expenses]
   );
-  const filtered =
-    yearFilter === "all" ? expenses : expenses.filter((e) => String(new Date(e.date).getFullYear()) === yearFilter);
+  const filtered = yearFilter === "all" ? expenses : expenses.filter((e) => String(isoYear(e.date)) === yearFilter);
   const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
   const sum = sorted.reduce((s, e) => s + Number(e.amount || 0), 0);
 
