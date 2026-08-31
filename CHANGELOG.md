@@ -40,6 +40,18 @@ here relates to the `release/vX.Y.Z` branch workflow.
 
 ### Fixed
 
+- Invoice numbering (`crud._next_invoice_number`): derive the next number
+  from `MAX(sequence)` of a new explicit `Invoice.sequence` column,
+  scoped by the invoice's real creation year, instead of `COUNT(*)` of
+  invoices whose `number` contained the year as a substring. Fixes three
+  bugs: deleting an invoice from the middle of a year's series could
+  make the next create collide with a surviving number (unhandled 500);
+  deleting the newest invoice silently reused its number (a GoBD
+  Sec 14 Abs.4 Nr.4 UStG violation - numbers must stay unique and
+  gapless); and a numeric `invoice_prefix` (e.g. "2026") could inflate
+  the count via an unrelated substring match. `create_invoice` also now
+  retries on a `UNIQUE` collision from near-simultaneous creates instead
+  of surfacing a raw 500.
 - `models.py`: replaced the deprecated `datetime.utcnow()` call with a
   timezone-aware equivalent that preserves the same naive-UTC stored
   value.

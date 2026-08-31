@@ -18,12 +18,12 @@ const expenses: Expense[] = [{ id: 1, date: "2026-01-05", category: "equipment",
 
 describe("Expenses", () => {
   it("renders the empty state when there are no expenses", () => {
-    render(<Expenses expenses={[]} onCreate={vi.fn()} onDelete={vi.fn()} />);
+    render(<Expenses expenses={[]} onCreate={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText(/Noch keine Ausgaben erfasst/)).toBeInTheDocument();
   });
 
   it("renders a row per expense with its translated category label", () => {
-    render(<Expenses expenses={expenses} onCreate={vi.fn()} onDelete={vi.fn()} />);
+    render(<Expenses expenses={expenses} onCreate={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("Lens")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Ausrüstung" })).toBeInTheDocument();
   });
