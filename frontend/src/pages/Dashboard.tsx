@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { currentYear, fmtEUR, invoiceTotals, isoYear } from "../utils";
+import { computeInvoiceStats, currentYear, fmtEUR, isoYear } from "../utils";
 import type { Expense, Invoice, Settings, Tab } from "../types";
 
 interface DashboardProps {
@@ -13,16 +13,15 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith("en") ? "en" : "de";
   const y = currentYear();
-  const paidThisYear = invoices.filter((i) => i.status === "bezahlt" && i.paid_date && isoYear(i.paid_date) === y);
-  const openInvoices = invoices.filter((i) => i.status === "offen");
+  // Every revenue/VAT/open-balance/threshold figure below goes through
+  // this one function, which excludes "storniert" (cancelled) invoices up
+  // front (issue #26) — see utils.ts's computeInvoiceStats.
+  const stats = computeInvoiceStats(invoices, y);
   const expensesThisYear = expenses.filter((e) => isoYear(e.date) === y);
 
-  const income = paidThisYear.reduce((s, i) => s + invoiceTotals(i).net, 0);
-  const vatCollected = paidThisYear.reduce((s, i) => s + invoiceTotals(i).vat, 0);
   const expenseSum = expensesThisYear.reduce((s, e) => s + Number(e.amount || 0), 0);
-  const profit = income - expenseSum;
-  const openSum = openInvoices.reduce((s, i) => s + invoiceTotals(i).gross, 0);
-  const revenueThisYearGross = paidThisYear.reduce((s, i) => s + invoiceTotals(i).gross, 0);
+  const profit = stats.income - expenseSum;
+  const revenueThisYearGross = stats.revenueThisYearGross;
   const prevYearRevenue = Number(settings.prev_year_revenue) || 0;
 
   const prevPct = Math.min(100, (prevYearRevenue / 25000) * 100);
@@ -59,11 +58,11 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
       <div className="grid-3">
         <div className="card">
           <div className="stat-label">{t("dashboard.incomeNet")}</div>
-          <div className="stat-value">{fmtEUR(income, lang)}</div>
-          {vatCollected > 0 ? (
-            <div className="stat-sub">{t("dashboard.vatNote", { amount: fmtEUR(vatCollected, lang) })}</div>
+          <div className="stat-value">{fmtEUR(stats.income, lang)}</div>
+          {stats.vatCollected > 0 ? (
+            <div className="stat-sub">{t("dashboard.vatNote", { amount: fmtEUR(stats.vatCollected, lang) })}</div>
           ) : (
-            <div className="stat-sub">{t("dashboard.paidInvoicesCount", { count: paidThisYear.length })}</div>
+            <div className="stat-sub">{t("dashboard.paidInvoicesCount", { count: stats.paidThisYearCount })}</div>
           )}
         </div>
         <div className="card">
@@ -78,12 +77,12 @@ export default function Dashboard({ settings, invoices, expenses, onTab }: Dashb
         </div>
       </div>
 
-      {openInvoices.length > 0 && (
+      {stats.openInvoicesCount > 0 && (
         <div className="card">
           <div className="stat-label">{t("dashboard.openInvoices")}</div>
-          <div className="stat-value">{fmtEUR(openSum, lang)}</div>
+          <div className="stat-value">{fmtEUR(stats.openSum, lang)}</div>
           <div className="stat-sub">
-            {t("dashboard.openInvoicesNote", { count: openInvoices.length })}
+            {t("dashboard.openInvoicesNote", { count: stats.openInvoicesCount })}
             <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => onTab("invoices")}>
               {t("dashboard.openInvoicesLink")}
             </span>

@@ -84,6 +84,50 @@ export interface InvoiceTotals {
   breakdown: VatBreakdownLine[];
 }
 
+// Input for computeInvoiceStats: everything invoiceTotals needs, plus the
+// status/paid_date fields that decide which bucket (paid this year / open)
+// an invoice falls into.
+export interface InvoiceStatsInput extends InvoiceTotalsInput {
+  status: string;
+  paid_date: string | null;
+}
+
+export interface InvoiceStats {
+  income: number;
+  vatCollected: number;
+  openSum: number;
+  revenueThisYearGross: number;
+  paidThisYearCount: number;
+  openInvoicesCount: number;
+}
+
+// Dashboard.tsx's revenue/VAT/open-balance/threshold aggregation, pulled
+// out into one pure function so there is exactly one place — not one per
+// stat card — that decides which invoices count. A "storniert" (cancelled)
+// invoice is excluded up front (issue #26): §14c UStG forbids simply
+// deleting an issued invoice, so cancellation is the only way its amount
+// stops counting here, and every stat below must actually honor that
+// rather than relying on it happening to never match "offen"/"bezahlt".
+export function computeInvoiceStats(invoices: InvoiceStatsInput[], year: number): InvoiceStats {
+  const active = invoices.filter((i) => i.status !== "storniert");
+  const paidThisYear = active.filter((i) => i.status === "bezahlt" && i.paid_date && isoYear(i.paid_date) === year);
+  const openInvoices = active.filter((i) => i.status === "offen");
+
+  const income = paidThisYear.reduce((s, i) => s + invoiceTotals(i).net, 0);
+  const vatCollected = paidThisYear.reduce((s, i) => s + invoiceTotals(i).vat, 0);
+  const openSum = openInvoices.reduce((s, i) => s + invoiceTotals(i).gross, 0);
+  const revenueThisYearGross = paidThisYear.reduce((s, i) => s + invoiceTotals(i).gross, 0);
+
+  return {
+    income,
+    vatCollected,
+    openSum,
+    revenueThisYearGross,
+    paidThisYearCount: paidThisYear.length,
+    openInvoicesCount: openInvoices.length,
+  };
+}
+
 export function invoiceTotals(inv: InvoiceTotalsInput): InvoiceTotals {
   const items = inv.items || [];
   const net = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
