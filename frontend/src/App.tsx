@@ -11,13 +11,6 @@ import Expenses from "./pages/Expenses";
 import SettingsPage from "./pages/SettingsPage";
 import type { Expense, ExpenseCreateInput, Invoice, InvoiceCreateInput, Settings, Tab } from "./types";
 
-function nextInvoiceNumber(settings: Settings, invoices: Invoice[]): string {
-  const year = new Date().getFullYear();
-  const prefix = settings.invoice_prefix ? `${settings.invoice_prefix}-` : "";
-  const count = invoices.filter((i) => i.number && i.number.includes(String(year))).length;
-  return `${prefix}${year}-${String(count + 1).padStart(3, "0")}`;
-}
-
 export default function App() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
@@ -118,12 +111,7 @@ export default function App() {
           )}
 
           {tab === "invoiceNew" && (
-            <InvoiceForm
-              settings={settings}
-              nextNumber={nextInvoiceNumber(settings, invoices)}
-              onCancel={() => setTab("invoices")}
-              onSubmit={handleCreateInvoice}
-            />
+            <InvoiceForm settings={settings} onCancel={() => setTab("invoices")} onSubmit={handleCreateInvoice} />
           )}
 
           {tab === "invoiceDetail" && (

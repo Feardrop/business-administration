@@ -5,7 +5,7 @@ import type { Settings } from "../types";
 
 // Mock react-i18next with the initReactI18next export required by i18n initialization
 vi.mock("react-i18next", async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     useTranslation: () => ({
@@ -58,17 +58,11 @@ describe("InvoiceForm", () => {
     iban: "DE89370400440532013000",
     kleinunternehmer: false,
     invoice_prefix: "FOTO",
-    prev_year_revenue: 0,
+    prev_year_revenue: "0",
   };
 
   it("renders the invoice number field with placeholder text instead of a computed value", () => {
-    render(
-      <InvoiceForm
-        settings={mockSettings}
-        onCancel={() => {}}
-        onSubmit={async () => {}}
-      />
-    );
+    render(<InvoiceForm settings={mockSettings} onCancel={() => {}} onSubmit={async () => {}} />);
 
     const numberInput = screen.getByPlaceholderText("assigned on save") as HTMLInputElement;
     expect(numberInput).toBeInTheDocument();
@@ -77,13 +71,7 @@ describe("InvoiceForm", () => {
   });
 
   it("does not compute or display an invoice number preview", () => {
-    render(
-      <InvoiceForm
-        settings={mockSettings}
-        onCancel={() => {}}
-        onSubmit={async () => {}}
-      />
-    );
+    render(<InvoiceForm settings={mockSettings} onCancel={() => {}} onSubmit={async () => {}} />);
 
     const numberInput = screen.getByPlaceholderText("assigned on save") as HTMLInputElement;
     // The input should be empty (no computed value like "FOTO2026-001")
